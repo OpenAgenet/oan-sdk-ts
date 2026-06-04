@@ -25,3 +25,14 @@ routes.
 
 Discovery returns verified resource metadata and artifact references. It is not
 treated as a download proxy for external Skill files or other artifacts.
+
+## Resource Draft Helpers
+
+`packages/sdk-ts` exposes convenience helpers for the four initial OAN resource forms:
+
+- `createAgentServiceDraft`
+- `createSkillDraft`
+- `createMcpServerDraft`
+- `createToolApiDraft`
+
+These helpers generate DID Document drafts with `oanMetadata`, resource descriptions, service endpoints where appropriate, protocol bindings, package metadata, and artifact references. They enforce DID subject-code and `resourceType` consistency before returning a draft.

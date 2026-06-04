@@ -6,6 +6,10 @@
 import {
   assertDidOan,
   assertUsableLifecycle,
+  createAgentServiceDraft,
+  createMcpServerDraft,
+  createSkillDraft,
+  createToolApiDraft,
   getArtifactReferences,
   OanVerificationError,
   verifyArtifactReferenceMaterial,
@@ -151,6 +155,58 @@ expectNoThrow(() => verifyArtifactReferenceMaterial(packageInfo));
 expectVerificationCode(
   () => verifyArtifactReferenceMaterial({ manifestUrl: "https://example.org/skill.json" }),
   "artifact_hash_missing",
+);
+
+const skillDraft = createSkillDraft({
+  resourceDid: "did:oan:SKDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  name: "Contract Review Skill",
+  description: "Review contracts and flag legal risks.",
+  capabilityTags: ["legal.contract-review"],
+  manifestUrl: "https://example.org/skills/contract-review.json",
+  packageHash: "sha256:skill-package",
+});
+assert(skillDraft.oanMetadata?.resourceType === "skill", "skill draft resource type mismatch");
+assert(skillDraft.service?.[0]?.type === "OANSkillManifest", "skill draft service type mismatch");
+assert(
+  skillDraft.oanMetadata?.packageInfo?.manifestUrl === "https://example.org/skills/contract-review.json",
+  "skill manifest url mismatch",
+);
+
+const portableSkill = createSkillDraft({
+  resourceDid: "did:oan:SKDM:8YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  name: "Portable Skill",
+  packageHash: "sha256:portable-skill",
+});
+assert((portableSkill.service ?? []).length === 0, "portable skill should not require a service endpoint");
+
+const mcpDraft = createMcpServerDraft({
+  resourceDid: "did:oan:MCDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  name: "Legal MCP Server",
+  serviceEndpoint: "https://example.org/mcp",
+});
+assert(mcpDraft.service?.[0]?.type === "OANMCPServer", "mcp draft service type mismatch");
+
+const apiDraft = createToolApiDraft({
+  resourceDid: "did:oan:TLDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  name: "Risk API",
+  serviceEndpoint: "https://example.org/openapi.json",
+});
+assert(apiDraft.service?.[0]?.type === "OANToolAPI", "tool api draft service type mismatch");
+
+const agentDraft = createAgentServiceDraft({
+  resourceDid: "did:oan:AGDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  name: "Risk Agent",
+  serviceEndpoint: "https://example.org/agent/invoke",
+});
+assert(agentDraft.oanMetadata?.resourceType === "agent_service", "agent draft resource type mismatch");
+
+expectVerificationCode(
+  () =>
+    createSkillDraft({
+      resourceDid: "did:oan:AGDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+      name: "Wrong Skill",
+    }),
+  "did_subject_resource_type_mismatch",
 );
 
 console.log("sdk core tests passed");

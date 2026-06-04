@@ -4,9 +4,13 @@
 // Email: jlxufly@gmail.com
 
 import type {
+  DidDocument,
   PackageInfo,
+  ProtocolBinding,
   ResourceDiscoveryCandidate,
   ResourcePackage,
+  ResourceDescription,
+  ServiceEndpoint,
   ResourceType,
   VersionMode,
 } from "../../protocol-types/src/index";
@@ -32,6 +36,31 @@ export class OanVerificationError extends Error {
   }
 }
 
+export interface ResourceDraftOptions {
+  resourceDid: string;
+  resourceType: ResourceType;
+  name: string;
+  description?: string;
+  capabilityTags?: string[];
+  version?: string;
+  versionScheme?: string;
+  serviceEndpoint?: string;
+  protocol?: string;
+  serviceType?: string;
+  manifestUrl?: string;
+  downloadUrl?: string;
+  schemaUrl?: string;
+  packageHash?: string;
+  metadataHash?: string;
+  hashAlgorithm?: string;
+  publisherDid?: string;
+  controllerDid?: string;
+  verificationMethodType?: string;
+  publicKeyMultibase?: string;
+  protocolBindings?: ProtocolBinding[];
+  resourceDescription?: Partial<ResourceDescription>;
+}
+
 export function assertDidOan(value: string): void {
   if (!/^did:oan:[A-Z0-9]{4}:[1-9A-HJ-NP-Za-km-z]{32}$/.test(value)) {
     throw new OanVerificationError("did_method_mismatch");
@@ -53,6 +82,141 @@ export function assertDidSubjectMatchesResourceType(resourceDid: string, resourc
   };
   if (expected[subjectCode] !== resourceType) {
     throw new OanVerificationError("did_subject_resource_type_mismatch");
+  }
+}
+
+export function createResourceDidDocumentDraft(options: ResourceDraftOptions): DidDocument {
+  assertDidSubjectMatchesResourceType(options.resourceDid, options.resourceType);
+  const version = options.version ?? "1.0.0";
+  const hashAlgorithm = options.hashAlgorithm ?? "sha256";
+  const keyId = `${options.resourceDid}#key-1`;
+  const service = buildDefaultService(options, version);
+  const serviceRef = service?.id ? `#${service.id.split("#").at(-1)}` : undefined;
+  const protocolBindings =
+    options.protocolBindings ??
+    (options.protocol
+      ? [
+          {
+            id: `${options.resourceDid}#binding-1`,
+            protocol: options.protocol,
+            version,
+            serviceRef,
+            schemaRef: options.schemaUrl,
+          },
+        ]
+      : []);
+  return {
+    "@context": ["https://www.w3.org/ns/did/v1", "https://w3id.org/oan/v1"],
+    id: options.resourceDid,
+    controller: options.controllerDid ?? options.publisherDid,
+    verificationMethod: [
+      {
+        id: keyId,
+        type: options.verificationMethodType ?? "Ed25519VerificationKey2020",
+        controller: options.resourceDid,
+        publicKeyMultibase: options.publicKeyMultibase ?? "zReplaceWithPublicKey",
+      },
+    ],
+    authentication: [keyId],
+    assertionMethod: [keyId],
+    service: service ? [service] : [],
+    oanMetadata: {
+      subjectType: options.resourceType,
+      resourceType: options.resourceType,
+      publisherDid: options.publisherDid,
+      controllerDid: options.controllerDid,
+      resourceDescription: {
+        name: options.name,
+        description: options.description,
+        capabilityTags: options.capabilityTags,
+        version,
+        ...options.resourceDescription,
+      },
+      capabilityTags: options.capabilityTags,
+      protocolBindings,
+      packageInfo: {
+        manifestUrl: options.manifestUrl,
+        downloadUrl: options.downloadUrl,
+        schemaUrl: options.schemaUrl,
+        packageHash: options.packageHash,
+        metadataHash: options.metadataHash,
+        hashAlgorithm,
+        version,
+        versionScheme: options.versionScheme ?? "semver",
+      },
+    },
+  };
+}
+
+export function createAgentServiceDraft(options: Omit<ResourceDraftOptions, "resourceType">): DidDocument {
+  return createResourceDidDocumentDraft({
+    protocol: "https",
+    serviceType: "OANAgentService",
+    ...options,
+    resourceType: "agent_service",
+  });
+}
+
+export function createSkillDraft(options: Omit<ResourceDraftOptions, "resourceType">): DidDocument {
+  return createResourceDidDocumentDraft({
+    serviceType: "OANSkillManifest",
+    manifestUrl: options.manifestUrl ?? options.serviceEndpoint,
+    ...options,
+    resourceType: "skill",
+  });
+}
+
+export function createMcpServerDraft(options: Omit<ResourceDraftOptions, "resourceType">): DidDocument {
+  return createResourceDidDocumentDraft({
+    protocol: "mcp",
+    serviceType: "OANMCPServer",
+    ...options,
+    resourceType: "mcp_server",
+  });
+}
+
+export function createToolApiDraft(options: Omit<ResourceDraftOptions, "resourceType">): DidDocument {
+  return createResourceDidDocumentDraft({
+    protocol: "https",
+    serviceType: "OANToolAPI",
+    schemaUrl: options.schemaUrl ?? options.serviceEndpoint,
+    ...options,
+    resourceType: "tool_api",
+  });
+}
+
+function buildDefaultService(options: ResourceDraftOptions, version: string): ServiceEndpoint | undefined {
+  const endpoint = options.serviceEndpoint ?? options.manifestUrl ?? options.schemaUrl;
+  if (!endpoint) return undefined;
+  const fragment =
+    options.resourceType === "skill"
+      ? "manifest"
+      : options.resourceType === "mcp_server"
+        ? "mcp"
+        : options.resourceType === "tool_api"
+          ? "api"
+          : "service";
+  return {
+    id: `${options.resourceDid}#${fragment}`,
+    type: options.serviceType ?? defaultServiceType(options.resourceType),
+    serviceEndpoint: endpoint,
+    protocol: options.protocol,
+    version,
+  };
+}
+
+function defaultServiceType(resourceType: ResourceType): string {
+  switch (resourceType) {
+    case "agent_service":
+      return "OANAgentService";
+    case "skill":
+      return "OANSkillManifest";
+    case "mcp_server":
+      return "OANMCPServer";
+    case "tool_api":
+      return "OANToolAPI";
+    default:
+      return "OANResourcePackage";
   }
 }
 

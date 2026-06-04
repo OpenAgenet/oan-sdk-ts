@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) 2026 OpenAgenet contributors -->
+<!-- Copyright (c) 2026 OpenAgenet contributors -->
 <!--
 Initial author: JINLIANG XU
 Email: jlxufly@gmail.com
@@ -6,18 +6,22 @@ Email: jlxufly@gmail.com
 
 # OAN SDK TypeScript
 
-TypeScript SDKs for OpenAgenet clients, Discovery access, and web-console helpers.
+TypeScript SDKs for OpenAgenet clients, Discovery access, and developer tools.
 
-## Planned Packages
+The active SDK surface is resource-oriented and uses `did:oan` identifiers.
+Client code should discover and verify Resource packages for Agent Service,
+Skill, MCP Server, and Tool/API resources instead of using legacy Agent-only
+routes.
 
-- typed clients for Root, Registrar, Discovery, and CDN APIs
-- Discovery query helpers
-- signed Discovery response verification helpers
-- capability tree loading and browsing helpers
-- DID Document draft and form helpers
-- error-code mapping
-- web-console validation utilities
+## Packages
 
-## Role
+- `packages/protocol-types`: shared TypeScript protocol types for `did:oan`
+  DID Documents, Resource packages, Root proofs, and Discovery responses.
+- `packages/client-ts`: small HTTP client for resource Discovery, Root version
+  lookup, CDN resource index access, and Discovery sync.
+- `packages/sdk-ts`: SDK core helpers for DID shape checks, resource package
+  binding checks, exact-version checks, lifecycle checks, and artifact reference
+  extraction.
 
-This repository supports web consoles, dashboards, developer tools, and browser or Node.js applications that integrate with OpenAgenet.
+Discovery returns verified resource metadata and artifact references. It is not
+treated as a download proxy for external Skill files or other artifacts.

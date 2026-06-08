@@ -26,6 +26,12 @@ routes.
 Discovery returns verified resource metadata and artifact references. It is not
 treated as a download proxy for external Skill files or other artifacts.
 
+## License
+
+This SDK repository is licensed under `Apache-2.0` to keep developer adoption
+and ecosystem integration low-friction. Brand and official OpenAgenet / OAN
+identity rights are reserved separately.
+
 ## Resource Draft Helpers
 
 `packages/sdk-ts` exposes convenience helpers for the four initial OAN resource forms:

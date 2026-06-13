@@ -42,13 +42,6 @@ export class OanClient {
     );
   }
 
-  async syncDiscoveryResourcesFromCdnFallback(): Promise<unknown> {
-    return this.postJson(
-      this.requireEndpoint("discoveryEndpoint", "/discovery/resources/sync"),
-      {},
-    );
-  }
-
   async getDiscoveryResource(resourceDid: string): Promise<{ resourceDid: string; package?: ResourcePackage | null }> {
     return this.getJson(
       this.requireEndpoint("discoveryEndpoint", `/discovery/index/resources/${encodeURIComponent(resourceDid)}`),

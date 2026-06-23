@@ -17,11 +17,14 @@ routes.
 
 - `packages/protocol-types`: shared TypeScript protocol types for `did:oan`
   DID Documents, Resource packages, Root proofs, and Discovery responses.
-- `packages/client-ts`: small HTTP client for resource Discovery, Root version
-  lookup, CDN resource index access, and Discovery sync.
+- `packages/client-ts`: HTTP client for Registrar, Root, CDN, and Discovery
+  resource workflows, including registration, discovery, package lookup, and
+  lifecycle observation helpers.
 - `packages/sdk-ts`: SDK core helpers for DID shape checks, resource package
   binding checks, exact-version checks, lifecycle checks, and artifact reference
   extraction.
+- `packages/governance-ts`: governance-facing SDK helpers built around current
+  trust-indexer read APIs and future chain-governance integration.
 
 Discovery returns verified resource metadata and artifact references. It is not
 treated as a download proxy for external Skill files or other artifacts.
@@ -42,3 +45,37 @@ identity rights are reserved separately.
 - `createToolApiDraft`
 
 These helpers generate DID Document drafts with `oanMetadata`, resource descriptions, service endpoints where appropriate, protocol bindings, package metadata, and artifact references. They enforce DID subject-code and `resourceType` consistency before returning a draft.
+
+## Layering With `oan-skill`
+
+`oan-sdk-ts` should remain the reusable TypeScript foundation.
+
+It owns:
+
+- protocol types
+- endpoint clients
+- verification helpers
+- lifecycle observation helpers
+- governance-facing read/write SDK surfaces
+
+It now also covers current live operational inspection helpers, including:
+
+- Registrar capability-tag suggestion
+- Registrar Root-authorization inspection
+- Discovery query explanation
+- Discovery authorized-domain inspection
+- Root resource-version inspection
+
+It now additionally provides browser- and portal-friendly helper surfaces for:
+
+- DID Document draft validation reports
+- normalized discovery query construction
+- concise trust summary derivation for packages and discovery results
+- lifecycle polling until discovery visibility
+
+This makes `oan-sdk-ts` suitable not only for developer tools and `oan-skill`,
+but also as the preferred protocol-facing client layer for future browser
+products such as `oan-homepage`.
+
+`oan-skill` is expected to build AI-facing workflows on top of this SDK layer
+rather than duplicating raw HTTP, type, or trust-verification logic.

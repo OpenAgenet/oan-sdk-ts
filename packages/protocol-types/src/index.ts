@@ -208,3 +208,156 @@ export interface ResourceDiscoveryResponse {
   createdAt: string;
   proof?: DataIntegrityProof | null;
 }
+
+export interface ResourceDiscoveryExplainItem {
+  resourceDid: string;
+  resourceType: ResourceType;
+  matched: boolean;
+  score: number;
+  textMatched?: boolean | null;
+  capabilityTagOverlap?: string[];
+  resourceTypeMatched?: boolean | null;
+  protocolMatched?: boolean | null;
+  [key: string]: unknown;
+}
+
+export interface ResourceDiscoveryExplainResponse {
+  query: ResourceDiscoveryQuery;
+  items: ResourceDiscoveryExplainItem[];
+  candidateCount: number;
+  usedIndexedPrefilter?: boolean;
+  [key: string]: unknown;
+}
+
+export interface ResourceRegistrationSubmission {
+  resourceDid: string;
+  resourceType: ResourceType;
+  didDocument: DidDocument;
+  packageVersion: string;
+  metadataHash: string;
+  packageHash: string;
+  hashAlgorithm: string;
+  registrationCredential?: unknown;
+  [key: string]: unknown;
+}
+
+export interface ResourceRegistrationResponse {
+  status: string;
+  resourceDid: string;
+  resourceType?: ResourceType;
+  registrationCredential?: unknown;
+  rootResponse?: unknown;
+}
+
+export interface RegistrarStatusResponse {
+  status?: string;
+  did?: string;
+  registrarDid?: string;
+  rootEndpoint?: string;
+  resourceRecordCount?: number;
+  protocolVersion?: string;
+  rootAuthorizationStatus?: string;
+  [key: string]: unknown;
+}
+
+export interface RootAuthorizationInspection {
+  registrarDid?: string;
+  discoveryDid?: string;
+  rootEndpoint?: string;
+  rootReachable?: boolean;
+  status?: string;
+  authorization?: unknown;
+  authorizedDomains?: string[];
+  rootStatusCode?: number;
+  error?: string;
+  [key: string]: unknown;
+}
+
+export interface RootStatusResponse {
+  status?: string;
+  latestVersionCount?: number;
+  cdnQueueCount?: number;
+  cdnReadyQueueCount?: number;
+  cdnActiveQueueCount?: number;
+  discoveryQueueCount?: number;
+  discoveryReadyQueueCount?: number;
+  discoveryPendingQueueCount?: number;
+  workerRuntime?: Record<string, unknown>;
+  eventRuntime?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface CdnStatusResponse {
+  status?: string;
+  resourceCount?: number;
+  [key: string]: unknown;
+}
+
+export interface DiscoveryStatusResponse {
+  status?: string;
+  did?: string;
+  discoveryDid?: string;
+  rootEndpoint?: string | null;
+  cdnEndpoint?: string | null;
+  rootAuthorizationStatus?: string;
+  indexedResourceCount?: number;
+  lastSync?: unknown;
+  [key: string]: unknown;
+}
+
+export interface DiscoveryVisibilityRequest {
+  resourceDids: string[];
+}
+
+export interface DiscoveryVisibilityResponse {
+  resourceDids?: string[];
+  visible?: string[];
+  visibleCount?: number;
+  [key: string]: unknown;
+}
+
+export interface DiscoveryAuthorizedDomainsResponse {
+  discoveryDid?: string;
+  authorizedDomains?: string[];
+  [key: string]: unknown;
+}
+
+export interface CapabilityTagSuggestionResponse {
+  suggestions?: string[];
+  [key: string]: unknown;
+}
+
+export interface RootResourceVersionListResponse {
+  did: string;
+  items: Array<Record<string, unknown>>;
+}
+
+export type OanWorkflowStage =
+  | "draft-prepared"
+  | "submitted-to-registrar"
+  | "accepted-by-registrar"
+  | "queued-at-root"
+  | "accepted-by-root"
+  | "published-to-cdn"
+  | "visible-in-discovery"
+  | "failed-validation"
+  | "failed-submission"
+  | "visibility-pending";
+
+export interface OanLifecycleSnapshot {
+  resourceDid: string;
+  registrarAccepted: boolean;
+  rootObserved: boolean;
+  cdnObserved: boolean;
+  discoveryVisible: boolean;
+  stage: OanWorkflowStage;
+  registrarRecord?: unknown;
+  rootResource?: unknown;
+  cdnPackage?: ResourcePackage | null;
+  discoveryVisibility?: DiscoveryVisibilityResponse;
+  registrarStatus?: RegistrarStatusResponse;
+  rootStatus?: RootStatusResponse;
+  cdnStatus?: CdnStatusResponse;
+  discoveryStatus?: DiscoveryStatusResponse;
+  observations?: string[];
+}

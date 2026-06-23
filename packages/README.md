@@ -6,4 +6,5 @@ Email: jlxufly@gmail.com
 
 # TypeScript Packages
 
-TypeScript SDK, generated protocol types, and client helpers.
+TypeScript SDK packages for OAN protocol types, service clients, verification,
+lifecycle observation, operational inspection, and governance-facing integration.

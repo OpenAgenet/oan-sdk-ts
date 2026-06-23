@@ -6,14 +6,31 @@
 import {
   assertDidOan,
   assertUsableLifecycle,
+  buildDiscoveryQuery,
+  createAgentIdentity,
   createAgentServiceDraft,
+  createDefaultSubjectIdentity,
+  createEmptyIdentityStoreSnapshot,
   createMcpServerDraft,
+  createRegistrationSubmissionFromIdentity,
   createSkillDraft,
   createToolApiDraft,
+  exportIdentityBundle,
   getArtifactReferences,
+  inferResourceTypeFromDidOan,
+  importIdentityBundle,
+  normalizeDidDocumentForOan,
+  normalizeDidOan,
+  normalizeRegistrationSubmissionForOan,
   OanVerificationError,
+  summarizeDiscoveryCandidate,
+  summarizeLifecycleSnapshot,
+  summarizeTrustFromPackage,
+  upsertIdentityRecord,
+  validateDidDocumentDraft,
   verifyArtifactReferenceMaterial,
   verifyCandidateMatchesPackage,
+  hasDidOanSemanticConflict,
   verifyResourcePackageShape,
 } from "../packages/sdk-ts/src/index.js";
 import type { ResourceDiscoveryCandidate, ResourcePackage } from "../packages/protocol-types/src/index.js";
@@ -113,6 +130,8 @@ function samplePackage(): ResourcePackage {
 
 const pkg = samplePackage();
 expectNoThrow(() => assertDidOan(pkg.resourceDid));
+assert(normalizeDidOan("did:oan:agbm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz") === pkg.resourceDid, "did normalization mismatch");
+assert(inferResourceTypeFromDidOan(pkg.resourceDid) === "agent_service", "inferred resource type mismatch");
 expectNoThrow(() => verifyResourcePackageShape(pkg));
 expectNoThrow(() => assertUsableLifecycle(pkg));
 
@@ -148,6 +167,10 @@ expectVerificationCode(
   () => verifyResourcePackageShape(wrongSubject),
   "did_subject_resource_type_mismatch",
 );
+assert(
+  hasDidOanSemanticConflict(pkg.resourceDid, { subjectType: "skill", resourceType: "skill" }),
+  "semantic conflict should be detected",
+);
 
 const packageInfo = getArtifactReferences(pkg);
 assert(packageInfo.manifestUrl === "https://example.org/agent/manifest.json", "manifest url mismatch");
@@ -178,6 +201,11 @@ const portableSkill = createSkillDraft({
   packageHash: "sha256:portable-skill",
 });
 assert((portableSkill.service ?? []).length === 0, "portable skill should not require a service endpoint");
+const portableSkillReport = validateDidDocumentDraft(portableSkill, {
+  resourceDid: portableSkill.id,
+  resourceType: "skill",
+});
+assert(portableSkillReport.ok, "portable skill draft should validate cleanly");
 
 const mcpDraft = createMcpServerDraft({
   resourceDid: "did:oan:MCDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
@@ -200,6 +228,60 @@ const agentDraft = createAgentServiceDraft({
 });
 assert(agentDraft.oanMetadata?.resourceType === "agent_service", "agent draft resource type mismatch");
 
+const normalizedSubmission = normalizeRegistrationSubmissionForOan({
+  resourceDid: "did:oan:agdm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  resourceType: "agent_service",
+  didDocument: {
+    id: "did:oan:agdm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+    controller: "did:oan:agdm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+    verificationMethod: [
+      {
+        id: "did:oan:agdm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz#key-1",
+        type: "Ed25519VerificationKey2020",
+        controller: "did:oan:agdm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+      },
+    ],
+    oanMetadata: {
+      subjectType: "agent_service",
+      resourceType: "agent_service",
+      controllerDid: "did:oan:agdm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+    },
+  },
+  packageVersion: "1.0.0",
+  metadataHash: "sha256:metadata",
+  packageHash: "sha256:package",
+  hashAlgorithm: "sha256",
+});
+assert(
+  normalizedSubmission.resourceDid === "did:oan:AGDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  "submission did normalization mismatch",
+);
+assert(
+  normalizedSubmission.didDocument.verificationMethod?.[0]?.controller ===
+    "did:oan:AGDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  "verification method controller normalization mismatch",
+);
+
+const normalizedDocument = normalizeDidDocumentForOan({
+  id: "did:oan:skdm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  service: [
+    {
+      id: "did:oan:skdm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz#manifest",
+      type: "OANSkillManifest",
+      serviceEndpoint: "https://example.org/skill.json",
+    },
+  ],
+  oanMetadata: {
+    subjectType: "skill",
+    resourceType: "skill",
+  },
+});
+assert(normalizedDocument.id === "did:oan:SKDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz", "document did normalization mismatch");
+assert(
+  normalizedDocument.service?.[0]?.id === "did:oan:SKDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz#manifest",
+  "service id normalization mismatch",
+);
+
 expectVerificationCode(
   () =>
     createSkillDraft({
@@ -208,5 +290,72 @@ expectVerificationCode(
     }),
   "did_subject_resource_type_mismatch",
 );
+
+const invalidReport = validateDidDocumentDraft({
+  id: "did:oan:AGDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  service: [{ id: "did:oan:AGDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz#svc", type: "Svc", serviceEndpoint: "https://x" }],
+  oanMetadata: {
+    subjectType: "agent_service",
+    resourceType: "agent_service",
+    protocolBindings: [{ id: "b1", protocol: "https", serviceRef: "#missing" }],
+    packageInfo: { manifestUrl: "https://example.org/agent.json" },
+  },
+}, {
+  resourceDid: "did:oan:AGDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  resourceType: "agent_service",
+});
+assert(!invalidReport.ok, "invalid draft report should fail");
+assert(invalidReport.issues.length >= 2, "invalid draft report should contain multiple issues");
+
+const builtQuery = buildDiscoveryQuery({
+  query: "  legal skill  ",
+  capabilityTags: [" legal.contract-review ", ""],
+  resourceType: "skill",
+  limit: 10,
+});
+assert(builtQuery.query === "legal skill", "query should be trimmed");
+assert(builtQuery.capabilityTags?.[0] === "legal.contract-review", "capability tag should be normalized");
+
+const trustSummary = summarizeTrustFromPackage(pkg);
+assert(trustSummary.level === "verified", "package trust summary should be verified");
+assert(trustSummary.checks.includes("package binding verified"), "trust summary should include binding verification");
+
+const discoverySummary = summarizeDiscoveryCandidate(candidate, pkg);
+assert(discoverySummary.resourceDid === pkg.resourceDid, "discovery summary did mismatch");
+assert(discoverySummary.primaryEndpoint === "https://example.org/agent/invoke", "discovery summary endpoint mismatch");
+assert(discoverySummary.trust.level === "verified", "discovery summary trust level mismatch");
+
+const lifecycleSummary = summarizeLifecycleSnapshot({
+  stage: "published-to-cdn",
+  registrarAccepted: true,
+  rootObserved: true,
+  cdnObserved: true,
+  discoveryVisible: false,
+  observations: ["root package exists"],
+});
+assert(lifecycleSummary.level === "warning", "lifecycle summary should be warning before discovery visibility");
+assert(lifecycleSummary.warnings.some((item) => item.includes("published-to-cdn")), "lifecycle warning should include stage");
+
+const subjectIdentity = await createDefaultSubjectIdentity("SDK Test Subject");
+const agentIdentity = await createAgentIdentity("SDK Test Skill", "skill", subjectIdentity.did, {
+  description: "Generated identity-backed skill",
+  capabilityTags: ["sdk.identity"],
+  manifestUrl: "https://example.org/skills/sdk-test.json",
+});
+const identitySubmission = createRegistrationSubmissionFromIdentity(agentIdentity, {
+  manifestUrl: "https://example.org/skills/sdk-test.json",
+  packageHash: "sha256:sdk-test-package",
+  metadataHash: "sha256:sdk-test-metadata",
+});
+assert(identitySubmission.resourceDid === agentIdentity.did, "identity-backed submission did mismatch");
+assert(identitySubmission.didDocument.verificationMethod?.[0]?.publicKeyJwk, "identity-backed draft should carry publicKeyJwk");
+
+let identityStore = createEmptyIdentityStoreSnapshot();
+identityStore = upsertIdentityRecord(identityStore, subjectIdentity);
+identityStore = upsertIdentityRecord(identityStore, agentIdentity);
+const exportedBundle = exportIdentityBundle(identityStore);
+const importedBundle = importIdentityBundle(exportedBundle);
+assert(importedBundle.subjects.length === 1, "imported bundle subject count mismatch");
+assert(importedBundle.agents.length === 1, "imported bundle agent count mismatch");
 
 console.log("sdk core tests passed");

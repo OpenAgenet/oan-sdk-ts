@@ -4,8 +4,9 @@
 // Email: jlxufly@gmail.com
 
 import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import {
   createAgentIdentityNode,
   ensureSubjectIdentityNode,
@@ -17,6 +18,11 @@ import {
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const genesisRegistrarDir =
+  process.env.OAN_GENESIS_REGISTRAR_DIR ??
+  resolve(repoRoot, "..", "oan-design-docs", "genesis", "nodes", "genesis-registrar-1");
 
 const workspace = await mkdtemp(join(tmpdir(), "oan-identity-store-"));
 try {
@@ -37,10 +43,7 @@ try {
   assert(loaded.subjects.length === 1, "loaded subject count mismatch");
   assert(loaded.agents.length === 1, "loaded agent count mismatch");
 
-  const importedNode = await importLegacyGenesisNodeDirectory(
-    "D:/WorkFiles/VscodeProject/OAN-new/oan-design-docs/genesis/nodes/genesis-registrar-1",
-    workspace,
-  );
+  const importedNode = await importLegacyGenesisNodeDirectory(genesisRegistrarDir, workspace);
   assert(importedNode.record.kind === "node", "legacy import should create node record");
   const reloaded = await loadIdentityStoreSnapshot(workspace);
   assert(reloaded.nodes.length === 1, "loaded node count mismatch after legacy import");

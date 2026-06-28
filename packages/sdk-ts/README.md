@@ -37,4 +37,6 @@ For product UX, the recommended pattern is:
 - keep the `.oan-dids` directory convention as a technical/runtime detail for SDK, skill, CLI, and advanced settings
 
 This package should remain transport-agnostic. Raw HTTP access belongs in
-`client-ts`, while AI-facing workflow orchestration belongs in `oan-skill`.
+`client-ts`, while community-facing AI workflow orchestration belongs in
+`oan-community-skill`. Official operations automation belongs in
+`oan-official-skill`.

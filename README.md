@@ -46,7 +46,7 @@ identity rights are reserved separately.
 
 These helpers generate DID Document drafts with `oanMetadata`, resource descriptions, service endpoints where appropriate, protocol bindings, package metadata, and artifact references. They enforce DID subject-code and `resourceType` consistency before returning a draft.
 
-## Layering With `oan-skill`
+## Layering With Skills
 
 `oan-sdk-ts` should remain the reusable TypeScript foundation.
 
@@ -73,9 +73,11 @@ It now additionally provides browser- and portal-friendly helper surfaces for:
 - concise trust summary derivation for packages and discovery results
 - lifecycle polling until discovery visibility
 
-This makes `oan-sdk-ts` suitable not only for developer tools and `oan-skill`,
-but also as the preferred protocol-facing client layer for future browser
-products such as `oan-homepage`.
+This makes `oan-sdk-ts` suitable not only for developer tools and
+`oan-community-skill`, but also as the preferred protocol-facing client layer
+for future browser products such as `oan-homepage`.
 
-`oan-skill` is expected to build AI-facing workflows on top of this SDK layer
-rather than duplicating raw HTTP, type, or trust-verification logic.
+`oan-community-skill` is expected to build community-facing AI workflows on top
+of this SDK layer rather than duplicating raw HTTP, type, or
+trust-verification logic. Official deployment, benchmark, and governance
+automation belongs in `oan-official-skill`.

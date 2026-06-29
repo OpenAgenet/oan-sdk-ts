@@ -32,18 +32,30 @@ treated as a download proxy for external Skill files or other artifacts.
 ## Official Endpoint Defaults
 
 `packages/client-ts` exports `DEFAULT_OAN_OFFICIAL_ENDPOINTS` and `OanClient`
-uses those values when endpoint options are omitted. The default profile targets
-the official OAN service domains:
+uses those values when options are omitted. The default profile targets the
+official OAN base URL:
+
+- Base URL: `https://api.openagenet.xyz`
+
+By default, `OanClient` derives Registrar, Discovery, Root, and CDN calls from
+that base URL. Third-party operators can expose the same route shape behind
+their own base URL:
+
+```ts
+new OanClient({ baseUrl: "https://oan.example.com" });
+```
+
+Advanced users and operators can still override individual node endpoints:
 
 - Registrar: `https://registrar.openagenet.xyz`
 - Discovery: `https://discovery.openagenet.xyz`
 - Root: `https://root.openagenet.xyz`
 - CDN: `https://cdn.openagenet.xyz`
 
-Users and products can still pass explicit `registrarEndpoint` and
-`discoveryEndpoint` values to use third-party compatible nodes. Keep official
-defaults centralized in the SDK so future IP, domain, or route migration can be
-handled in one place instead of scattered through apps and skills.
+Explicit node endpoints take precedence over `baseUrl` for their corresponding
+node. Keep official defaults centralized in the SDK so future IP, domain, or
+route migration can be handled in one place instead of scattered through apps
+and skills.
 
 ## License
 

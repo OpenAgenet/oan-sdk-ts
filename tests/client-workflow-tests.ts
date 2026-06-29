@@ -50,16 +50,47 @@ const submission: ResourceRegistrationSubmission = {
 };
 
 const fetchStub = createFetchStub({
-  [`GET ${DEFAULT_OAN_OFFICIAL_ENDPOINTS.registrarEndpoint}/registrar/status`]: {
+  [`GET ${DEFAULT_OAN_OFFICIAL_ENDPOINTS.baseUrl}/registrar/status`]: {
     body: {
       status: "ok",
       rootAuthorizationStatus: "authorized",
     },
   },
-  [`GET ${DEFAULT_OAN_OFFICIAL_ENDPOINTS.discoveryEndpoint}/discovery/status`]: {
+  [`GET ${DEFAULT_OAN_OFFICIAL_ENDPOINTS.baseUrl}/discovery/status`]: {
     body: {
       status: "ok",
       rootAuthorizationStatus: "authorized",
+    },
+  },
+  "GET https://gateway.example/registrar/status": {
+    body: {
+      status: "ok",
+      rootAuthorizationStatus: "authorized",
+    },
+  },
+  "GET https://gateway.example/discovery/status": {
+    body: {
+      status: "ok",
+      rootAuthorizationStatus: "authorized",
+    },
+  },
+  "GET https://gateway.example/root/status": {
+    body: {
+      status: "ok",
+      latestVersionCount: 0,
+    },
+  },
+  "GET https://gateway.example/cdn/status": {
+    body: {
+      status: "ok",
+      resourceCount: 0,
+    },
+  },
+  "GET https://override-registrar.example/registrar/status": {
+    body: {
+      status: "ok",
+      rootAuthorizationStatus: "authorized",
+      endpoint: "override",
     },
   },
   "POST https://registrar.example/resources/register": {
@@ -229,6 +260,32 @@ const officialRegistrarStatus = await officialDefaultClient.getRegistrarStatus()
 assert(officialRegistrarStatus.status === "ok", "default official registrar endpoint mismatch");
 const officialDiscoveryStatus = await officialDefaultClient.getDiscoveryStatus();
 assert(officialDiscoveryStatus.status === "ok", "default official discovery endpoint mismatch");
+
+const gatewayClient = new OanClient({
+  baseUrl: "https://gateway.example/",
+  fetchImpl: fetchStub,
+});
+const gatewayRegistrarStatus = await gatewayClient.getRegistrarStatus();
+assert(gatewayRegistrarStatus.status === "ok", "baseUrl registrar endpoint mismatch");
+const gatewayDiscoveryStatus = await gatewayClient.getDiscoveryStatus();
+assert(gatewayDiscoveryStatus.status === "ok", "baseUrl discovery endpoint mismatch");
+const gatewayRootStatus = await gatewayClient.getRootStatus();
+assert(gatewayRootStatus.status === "ok", "baseUrl root endpoint mismatch");
+const gatewayCdnStatus = await gatewayClient.getCdnStatus();
+assert(gatewayCdnStatus.status === "ok", "baseUrl cdn endpoint mismatch");
+
+const endpointOverrideClient = new OanClient({
+  baseUrl: "https://gateway.example",
+  registrarEndpoint: "https://override-registrar.example",
+  fetchImpl: fetchStub,
+});
+const overrideRegistrarStatus = await endpointOverrideClient.getRegistrarStatus();
+assert(
+  (overrideRegistrarStatus as { endpoint?: string }).endpoint === "override",
+  "explicit registrar endpoint should override baseUrl",
+);
+const overrideDiscoveryStatus = await endpointOverrideClient.getDiscoveryStatus();
+assert(overrideDiscoveryStatus.status === "ok", "baseUrl should still supply non-overridden endpoints");
 
 const client = new OanClient({
   registrarEndpoint: "https://registrar.example",

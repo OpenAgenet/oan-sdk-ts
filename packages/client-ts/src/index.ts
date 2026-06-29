@@ -24,6 +24,7 @@ import type {
 } from "../../protocol-types/src/index.js";
 
 export interface OanClientOptions {
+  baseUrl?: string;
   registrarEndpoint?: string;
   discoveryEndpoint?: string;
   rootEndpoint?: string;
@@ -32,6 +33,7 @@ export interface OanClientOptions {
 }
 
 export interface OanOfficialEndpoints {
+  baseUrl: string;
   homepageEndpoint: string;
   homepageApiEndpoint: string;
   registrarEndpoint: string;
@@ -41,9 +43,14 @@ export interface OanOfficialEndpoints {
   trustIndexerEndpoint: string;
 }
 
-type OanClientEndpointKey = Exclude<keyof OanClientOptions, "fetchImpl">;
+type OanClientEndpointKey = Exclude<keyof OanClientOptions, "fetchImpl" | "baseUrl">;
+type OanClientResolvedEndpoints = Required<Pick<
+  OanClientOptions,
+  "registrarEndpoint" | "discoveryEndpoint" | "rootEndpoint" | "cdnEndpoint"
+>>;
 
 export const DEFAULT_OAN_OFFICIAL_ENDPOINTS: OanOfficialEndpoints = {
+  baseUrl: "https://api.openagenet.xyz",
   homepageEndpoint: "https://openagenet.xyz",
   homepageApiEndpoint: "https://api.openagenet.xyz",
   registrarEndpoint: "https://registrar.openagenet.xyz",
@@ -73,15 +80,16 @@ export class OanHttpError extends Error {
 
 export class OanClient {
   private readonly fetchImpl: typeof fetch;
-  private readonly options: Required<Omit<OanClientOptions, "fetchImpl">>;
+  private readonly options: OanClientResolvedEndpoints;
 
   constructor(options: OanClientOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch;
+    const baseUrl = normalizeEndpoint(options.baseUrl ?? DEFAULT_OAN_OFFICIAL_ENDPOINTS.baseUrl);
     this.options = {
-      registrarEndpoint: options.registrarEndpoint ?? DEFAULT_OAN_OFFICIAL_ENDPOINTS.registrarEndpoint,
-      discoveryEndpoint: options.discoveryEndpoint ?? DEFAULT_OAN_OFFICIAL_ENDPOINTS.discoveryEndpoint,
-      rootEndpoint: options.rootEndpoint ?? DEFAULT_OAN_OFFICIAL_ENDPOINTS.rootEndpoint,
-      cdnEndpoint: options.cdnEndpoint ?? DEFAULT_OAN_OFFICIAL_ENDPOINTS.cdnEndpoint,
+      registrarEndpoint: options.registrarEndpoint ?? baseUrl,
+      discoveryEndpoint: options.discoveryEndpoint ?? baseUrl,
+      rootEndpoint: options.rootEndpoint ?? baseUrl,
+      cdnEndpoint: options.cdnEndpoint ?? baseUrl,
     };
   }
 
@@ -291,7 +299,7 @@ export class OanClient {
     if (typeof endpoint !== "string" || endpoint.trim() === "") {
       throw new Error(`missing_${String(key)}`);
     }
-    return `${endpoint.replace(/\/+$/, "")}${path}`;
+    return `${normalizeEndpoint(endpoint)}${path}`;
   }
 
   private async getJson<T>(url: string): Promise<T> {
@@ -326,6 +334,10 @@ export class OanClient {
       return undefined;
     }
   }
+}
+
+function normalizeEndpoint(endpoint: string): string {
+  return endpoint.trim().replace(/\/+$/, "");
 }
 
 function deriveWorkflowStage(input: {

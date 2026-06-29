@@ -29,6 +29,22 @@ routes.
 Discovery returns verified resource metadata and artifact references. It is not
 treated as a download proxy for external Skill files or other artifacts.
 
+## Official Endpoint Defaults
+
+`packages/client-ts` exports `DEFAULT_OAN_OFFICIAL_ENDPOINTS` and `OanClient`
+uses those values when endpoint options are omitted. The default profile targets
+the official OAN service domains:
+
+- Registrar: `https://registrar.openagenet.xyz`
+- Discovery: `https://discovery.openagenet.xyz`
+- Root: `https://root.openagenet.xyz`
+- CDN: `https://cdn.openagenet.xyz`
+
+Users and products can still pass explicit `registrarEndpoint` and
+`discoveryEndpoint` values to use third-party compatible nodes. Keep official
+defaults centralized in the SDK so future IP, domain, or route migration can be
+handled in one place instead of scattered through apps and skills.
+
 ## License
 
 This SDK repository is licensed under `Apache-2.0` to keep developer adoption

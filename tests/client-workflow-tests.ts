@@ -3,7 +3,7 @@
 // Initial author: JINLIANG XU
 // Email: jlxufly@gmail.com
 
-import { OanClient } from "../packages/client-ts/src/index.js";
+import { DEFAULT_OAN_OFFICIAL_ENDPOINTS, OanClient } from "../packages/client-ts/src/index.js";
 import { GovernanceClient, subjectTypeCodeForRole } from "../packages/governance-ts/src/index.js";
 import type { ResourceRegistrationSubmission } from "../packages/protocol-types/src/index.js";
 
@@ -50,6 +50,18 @@ const submission: ResourceRegistrationSubmission = {
 };
 
 const fetchStub = createFetchStub({
+  [`GET ${DEFAULT_OAN_OFFICIAL_ENDPOINTS.registrarEndpoint}/registrar/status`]: {
+    body: {
+      status: "ok",
+      rootAuthorizationStatus: "authorized",
+    },
+  },
+  [`GET ${DEFAULT_OAN_OFFICIAL_ENDPOINTS.discoveryEndpoint}/discovery/status`]: {
+    body: {
+      status: "ok",
+      rootAuthorizationStatus: "authorized",
+    },
+  },
   "POST https://registrar.example/resources/register": {
     body: {
       status: "submitted",
@@ -211,6 +223,12 @@ const fetchStub = createFetchStub({
     },
   },
 });
+
+const officialDefaultClient = new OanClient({ fetchImpl: fetchStub });
+const officialRegistrarStatus = await officialDefaultClient.getRegistrarStatus();
+assert(officialRegistrarStatus.status === "ok", "default official registrar endpoint mismatch");
+const officialDiscoveryStatus = await officialDefaultClient.getDiscoveryStatus();
+assert(officialDiscoveryStatus.status === "ok", "default official discovery endpoint mismatch");
 
 const client = new OanClient({
   registrarEndpoint: "https://registrar.example",

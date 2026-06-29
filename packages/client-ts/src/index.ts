@@ -31,6 +31,28 @@ export interface OanClientOptions {
   fetchImpl?: typeof fetch;
 }
 
+export interface OanOfficialEndpoints {
+  homepageEndpoint: string;
+  homepageApiEndpoint: string;
+  registrarEndpoint: string;
+  discoveryEndpoint: string;
+  rootEndpoint: string;
+  cdnEndpoint: string;
+  trustIndexerEndpoint: string;
+}
+
+type OanClientEndpointKey = Exclude<keyof OanClientOptions, "fetchImpl">;
+
+export const DEFAULT_OAN_OFFICIAL_ENDPOINTS: OanOfficialEndpoints = {
+  homepageEndpoint: "https://openagenet.xyz",
+  homepageApiEndpoint: "https://api.openagenet.xyz",
+  registrarEndpoint: "https://registrar.openagenet.xyz",
+  discoveryEndpoint: "https://discovery.openagenet.xyz",
+  rootEndpoint: "https://root.openagenet.xyz",
+  cdnEndpoint: "https://cdn.openagenet.xyz",
+  trustIndexerEndpoint: "https://trust.openagenet.xyz",
+};
+
 export interface ObserveLifecycleUntilVisibleOptions {
   intervalMs?: number;
   timeoutMs?: number;
@@ -51,9 +73,16 @@ export class OanHttpError extends Error {
 
 export class OanClient {
   private readonly fetchImpl: typeof fetch;
+  private readonly options: Required<Omit<OanClientOptions, "fetchImpl">>;
 
-  constructor(private readonly options: OanClientOptions) {
+  constructor(options: OanClientOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.options = {
+      registrarEndpoint: options.registrarEndpoint ?? DEFAULT_OAN_OFFICIAL_ENDPOINTS.registrarEndpoint,
+      discoveryEndpoint: options.discoveryEndpoint ?? DEFAULT_OAN_OFFICIAL_ENDPOINTS.discoveryEndpoint,
+      rootEndpoint: options.rootEndpoint ?? DEFAULT_OAN_OFFICIAL_ENDPOINTS.rootEndpoint,
+      cdnEndpoint: options.cdnEndpoint ?? DEFAULT_OAN_OFFICIAL_ENDPOINTS.cdnEndpoint,
+    };
   }
 
   async registerResource(
@@ -257,7 +286,7 @@ export class OanClient {
     }
   }
 
-  private requireEndpoint(key: keyof OanClientOptions, path: string): string {
+  private requireEndpoint(key: OanClientEndpointKey, path: string): string {
     const endpoint = this.options[key];
     if (typeof endpoint !== "string" || endpoint.trim() === "") {
       throw new Error(`missing_${String(key)}`);

@@ -63,6 +63,7 @@ export interface OanDiscoveryResultSummary {
   title?: string;
   description?: string;
   capabilityTags: string[];
+  authorizedDomains: string[];
   protocols: string[];
   primaryEndpoint?: string;
   trust: OanTrustSummary;
@@ -84,6 +85,7 @@ export interface ResourceDraftOptions {
   name: string;
   description?: string;
   capabilityTags?: string[];
+  authorizedDomains?: string[];
   version?: string;
   versionScheme?: string;
   serviceEndpoint?: string;
@@ -170,6 +172,7 @@ export function createResourceDidDocumentDraft(options: ResourceDraftOptions): D
         ...options.resourceDescription,
       },
       capabilityTags: options.capabilityTags,
+      authorizedDomains: options.authorizedDomains,
       protocolBindings,
       packageInfo: {
         manifestUrl: options.manifestUrl,
@@ -279,6 +282,13 @@ export function verifyResourcePackageShape(resourcePackage: ResourcePackage): vo
   ) {
     throw new OanVerificationError("metadata_binding_mismatch");
   }
+  const didDocumentAuthorizedDomains = resourcePackage.didDocument.oanMetadata?.authorizedDomains;
+  if (
+    Array.isArray(didDocumentAuthorizedDomains) &&
+    !sameStringList(metadata.authorizedDomains ?? [], didDocumentAuthorizedDomains)
+  ) {
+    throw new OanVerificationError("metadata_binding_mismatch");
+  }
   const claims = resourcePackage.rootProof?.packageClaims;
   if (
     !claims ||
@@ -289,7 +299,9 @@ export function verifyResourcePackageShape(resourcePackage: ResourcePackage): vo
     claims.metadataHash !== resourcePackage.metadataHash ||
     claims.packageHash !== resourcePackage.packageHash ||
     claims.hashAlgorithm !== resourcePackage.hashAlgorithm ||
-    claims.lifecycleState !== resourcePackage.metadata.lifecycleState
+    claims.lifecycleState !== resourcePackage.metadata.lifecycleState ||
+    (Array.isArray(claims.authorizedDomains) &&
+      !sameStringList(claims.authorizedDomains, resourcePackage.metadata.authorizedDomains ?? []))
   ) {
     throw new OanVerificationError("root_claim_mismatch");
   }
@@ -485,6 +497,11 @@ export function summarizeDiscoveryCandidate(
     ...(metadata?.capabilityTags ?? []),
     ...(description?.capabilityTags ?? []),
   ]);
+  const authorizedDomains = uniqueStrings([
+    ...(candidate.authorizedDomains ?? []),
+    ...(metadata?.authorizedDomains ?? []),
+    ...(resourcePackage?.didDocument?.oanMetadata?.authorizedDomains ?? []),
+  ]);
   const protocols = uniqueStrings([
     ...extractProtocolsFromBindings(candidate.protocolBindings),
     ...extractProtocolsFromBindings(metadata?.protocolBindings),
@@ -498,6 +515,7 @@ export function summarizeDiscoveryCandidate(
     title: description?.name ?? metadata?.name,
     description: description?.description ?? metadata?.description,
     capabilityTags,
+    authorizedDomains,
     protocols,
     primaryEndpoint: extractPrimaryEndpoint(candidate, resourcePackage),
     trust: resourcePackage
@@ -587,6 +605,10 @@ function extractProtocolsFromBindings(bindings: unknown): string[] {
         : undefined,
     )
     .filter((value): value is string => typeof value === "string" && value.length > 0);
+}
+
+function sameStringList(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function uniqueStrings(values: string[]): string[] {

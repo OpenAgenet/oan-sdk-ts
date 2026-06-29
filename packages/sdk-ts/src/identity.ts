@@ -18,6 +18,7 @@ export interface OanIdentityProfile {
   domainCode?: string;
   ownerSubjectDid?: string;
   capabilityTags?: string[];
+  authorizedDomains?: string[];
   description?: string;
   origin?: "generated" | "legacy-genesis-import";
   metadata?: Record<string, unknown>;
@@ -53,6 +54,7 @@ export interface CreateIdentityOptions {
   did?: string;
   ownerSubjectDid?: string;
   capabilityTags?: string[];
+  authorizedDomains?: string[];
   description?: string;
   serviceEndpoint?: string;
   serviceType?: string;
@@ -75,6 +77,7 @@ export interface RegistrationMaterialOptions {
   serviceType?: string;
   protocol?: string;
   capabilityTags?: string[];
+  authorizedDomains?: string[];
   description?: string;
   packageInfo?: Record<string, unknown>;
 }
@@ -104,6 +107,7 @@ export async function createOanIdentityRecord(
     name: options.label,
     description: options.description,
     capabilityTags: options.capabilityTags,
+    authorizedDomains: options.authorizedDomains,
     serviceEndpoint: options.serviceEndpoint,
     serviceType: options.serviceType,
     protocol: options.protocol,
@@ -137,6 +141,7 @@ export async function createOanIdentityRecord(
       domainCode,
       ownerSubjectDid: options.ownerSubjectDid,
       capabilityTags: options.capabilityTags,
+      authorizedDomains: options.authorizedDomains,
       description: options.description,
       origin: options.origin ?? "generated",
       metadata: options.metadata,
@@ -226,6 +231,10 @@ export function createRegistrationSubmissionFromIdentity(
     options.capabilityTags ??
     record.profile.capabilityTags ??
     (record.didDocument.oanMetadata?.capabilityTags as string[] | undefined);
+  const authorizedDomains =
+    options.authorizedDomains ??
+    record.profile.authorizedDomains ??
+    (record.didDocument.oanMetadata?.authorizedDomains as string[] | undefined);
   const draft = createResourceDidDocumentDraft({
     resourceDid: record.did,
     resourceType: record.profile.resourceType,
@@ -234,6 +243,7 @@ export function createRegistrationSubmissionFromIdentity(
       record.profile.label,
     description,
     capabilityTags,
+    authorizedDomains,
     serviceEndpoint: endpoint,
     manifestUrl: options.manifestUrl,
     schemaUrl: options.schemaUrl,

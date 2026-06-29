@@ -58,6 +58,7 @@ export interface OanMetadata {
   ttl?: number;
   resourceDescription?: ResourceDescription;
   capabilityTags?: string[];
+  authorizedDomains?: string[];
   protocolBindings?: ProtocolBinding[];
   implementationLinks?: ImplementationLink[];
   credentialRequirements?: CredentialRequirement[];
@@ -133,6 +134,7 @@ export interface ResourceMetadata {
   name: string;
   description?: string;
   capabilityTags?: string[];
+  authorizedDomains?: string[];
   protocolBindings?: unknown[];
   services?: ServiceEndpoint[];
   lifecycleState: string;
@@ -162,6 +164,7 @@ export interface ResourcePackageClaims {
   packageHash: string;
   hashAlgorithm: string;
   lifecycleState: string;
+  authorizedDomains?: string[];
   bulletinRef?: string;
 }
 
@@ -196,6 +199,7 @@ export interface ResourceDiscoveryCandidate {
   version?: string;
   lifecycleState?: string;
   capabilityTags?: string[];
+  authorizedDomains?: string[];
   services?: ServiceEndpoint[];
   protocolBindings?: unknown[];
   packageInfo?: PackageInfo;

@@ -82,6 +82,7 @@ function samplePackage(): ResourcePackage {
           description: "Test agent service",
           capabilityTags: ["test.agent"],
         },
+        authorizedDomains: ["legal"],
         packageInfo: {
           manifestUrl: "https://example.org/agent/manifest.json",
           packageHash: "sha256:package",
@@ -102,6 +103,7 @@ function samplePackage(): ResourcePackage {
       name: "Fixture Agent",
       description: "Test agent service",
       capabilityTags: ["test.agent"],
+      authorizedDomains: ["legal"],
       protocolBindings: [],
       services: [],
       lifecycleState: "active",
@@ -122,6 +124,7 @@ function samplePackage(): ResourcePackage {
         packageHash: "sha256:package",
         hashAlgorithm: "sha256",
         lifecycleState: "active",
+        authorizedDomains: ["legal"],
       },
     },
     createdAt: "2026-06-04T00:00:00Z",
@@ -158,6 +161,13 @@ expectVerificationCode(
   "root_claim_mismatch",
 );
 
+const tamperedDomains = samplePackage();
+tamperedDomains.rootProof.packageClaims!.authorizedDomains = ["finance"];
+expectVerificationCode(
+  () => verifyResourcePackageShape(tamperedDomains),
+  "root_claim_mismatch",
+);
+
 const wrongSubject = samplePackage();
 wrongSubject.resourceType = "skill";
 wrongSubject.metadata.resourceType = "skill";
@@ -185,10 +195,12 @@ const skillDraft = createSkillDraft({
   name: "Contract Review Skill",
   description: "Review contracts and flag legal risks.",
   capabilityTags: ["legal.contract-review"],
+  authorizedDomains: ["legal"],
   manifestUrl: "https://example.org/skills/contract-review.json",
   packageHash: "sha256:skill-package",
 });
 assert(skillDraft.oanMetadata?.resourceType === "skill", "skill draft resource type mismatch");
+assert(skillDraft.oanMetadata?.authorizedDomains?.[0] === "legal", "skill draft authorized domain mismatch");
 assert(skillDraft.service?.[0]?.type === "OANSkillManifest", "skill draft service type mismatch");
 assert(
   skillDraft.oanMetadata?.packageInfo?.manifestUrl === "https://example.org/skills/contract-review.json",
@@ -322,6 +334,7 @@ assert(trustSummary.checks.includes("package binding verified"), "trust summary 
 
 const discoverySummary = summarizeDiscoveryCandidate(candidate, pkg);
 assert(discoverySummary.resourceDid === pkg.resourceDid, "discovery summary did mismatch");
+assert(discoverySummary.authorizedDomains[0] === "legal", "discovery summary authorized domain mismatch");
 assert(discoverySummary.primaryEndpoint === "https://example.org/agent/invoke", "discovery summary endpoint mismatch");
 assert(discoverySummary.trust.level === "verified", "discovery summary trust level mismatch");
 
@@ -340,6 +353,7 @@ const subjectIdentity = await createDefaultSubjectIdentity("SDK Test Subject");
 const agentIdentity = await createAgentIdentity("SDK Test Skill", "skill", subjectIdentity.did, {
   description: "Generated identity-backed skill",
   capabilityTags: ["sdk.identity"],
+  authorizedDomains: ["legal"],
   manifestUrl: "https://example.org/skills/sdk-test.json",
 });
 const identitySubmission = createRegistrationSubmissionFromIdentity(agentIdentity, {
@@ -348,6 +362,10 @@ const identitySubmission = createRegistrationSubmissionFromIdentity(agentIdentit
   metadataHash: "sha256:sdk-test-metadata",
 });
 assert(identitySubmission.resourceDid === agentIdentity.did, "identity-backed submission did mismatch");
+assert(
+  identitySubmission.didDocument.oanMetadata?.authorizedDomains?.[0] === "legal",
+  "identity-backed submission authorized domain mismatch",
+);
 assert(identitySubmission.didDocument.verificationMethod?.[0]?.publicKeyJwk, "identity-backed draft should carry publicKeyJwk");
 
 let identityStore = createEmptyIdentityStoreSnapshot();

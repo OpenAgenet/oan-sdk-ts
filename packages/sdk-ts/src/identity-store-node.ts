@@ -107,6 +107,7 @@ export async function createAgentIdentityNode(
     identityDir?: string;
     description?: string;
     capabilityTags?: string[];
+    authorizedDomains?: string[];
     serviceEndpoint?: string;
     manifestUrl?: string;
     schemaUrl?: string;
@@ -121,6 +122,7 @@ export async function createAgentIdentityNode(
     ownerSubjectDid: options.ownerSubjectDid,
     description: options.description,
     capabilityTags: options.capabilityTags,
+    authorizedDomains: options.authorizedDomains,
     serviceEndpoint: options.serviceEndpoint,
     manifestUrl: options.manifestUrl,
     schemaUrl: options.schemaUrl,

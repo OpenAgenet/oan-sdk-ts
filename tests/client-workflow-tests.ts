@@ -118,6 +118,29 @@ const fetchStub = createFetchStub({
       suggestions: ["protocol.mcp"],
     },
   },
+  "POST https://registrar.example/capability-tags/normalize": {
+    body: {
+      tags: ["protocol.mcp", "security.audit"],
+      capabilityTags: ["protocol.mcp", "security.audit"],
+    },
+  },
+  "GET https://registrar.example/registration/domain-catalog": {
+    body: {
+      registrarDid: "did:oan:INRG:test",
+      authorizedDomains: ["legal"],
+      domains: [{ id: "legal.contract_law", label: "Contract Law", selectable: true }],
+    },
+  },
+  "POST https://registrar.example/registration/suggestions": {
+    body: {
+      authorizedDomains: [{ id: "legal.contract_law", label: "Contract Law", score: 0.9, covered: true, reason: "matched" }],
+      outOfScopeDomainHints: [],
+      capabilityTags: [{ value: "contract-law.force-majeure", score: 0.8, reason: "matched" }],
+      resourceTypeHints: [{ value: "skill", score: 0.7, reason: "matched" }],
+      protocolHints: [{ value: "https", score: 0.6, reason: "matched" }],
+      warnings: [],
+    },
+  },
   [`GET https://registrar.example/resources/${encodeURIComponent(resourceDid)}`]: {
     body: {
       resourceDid,
@@ -216,6 +239,16 @@ const fetchStub = createFetchStub({
       usedIndexedPrefilter: true,
     },
   },
+  "POST https://discovery.example/discovery/query/suggestions": {
+    body: {
+      queryRewrite: null,
+      capabilityTags: [{ value: "cross-cutting.audit", score: 0.8, reason: "matched" }],
+      resourceTypes: [{ value: "mcp_server", score: 0.7, reason: "matched" }],
+      protocols: [{ value: "mcp", score: 0.9, reason: "matched" }],
+      authorizedDomainHints: [{ id: "technology.security", label: "Security", score: 0.7, covered: true, reason: "matched" }],
+      warnings: [],
+    },
+  },
   "GET https://indexer.example/v1/summary": {
     body: {
       active_registrar_count: 1,
@@ -306,6 +339,27 @@ assert(explanation.candidateCount === 1, "discovery explanation should return ca
 
 const tagSuggestions = await client.suggestCapabilityTags({ query: "mcp server" });
 assert(tagSuggestions.suggestions?.[0] === "protocol.mcp", "capability suggestion mismatch");
+
+const normalizedTags = await client.normalizeCapabilityTags([" Protocol MCP ", "security audit"]);
+assert(normalizedTags.tags[0] === "protocol.mcp", "capability tag normalization mismatch");
+
+const domainCatalog = await client.getRegistrationDomainCatalog();
+assert(domainCatalog.domains?.[0]?.id === "legal.contract_law", "registration domain catalog mismatch");
+
+const registrationSuggestions = await client.suggestRegistrationMetadata({
+  resourceType: "skill",
+  name: "Contract review",
+  description: "Review contract risk",
+});
+assert(
+  registrationSuggestions.capabilityTags[0]?.value === "contract-law.force-majeure",
+  "registration suggestion mismatch",
+);
+
+const discoverySuggestions = await client.suggestDiscoveryQuery({
+  query: "Find an MCP server for security audit",
+});
+assert(discoverySuggestions.protocols[0]?.value === "mcp", "discovery suggestion mismatch");
 
 const registrarRootAuthorization = await client.getRegistrarRootAuthorization();
 assert(registrarRootAuthorization.rootReachable, "registrar root authorization reachability mismatch");

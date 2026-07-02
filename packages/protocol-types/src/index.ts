@@ -253,6 +253,64 @@ export interface ResourceRegistrationResponse {
   rootResponse?: unknown;
 }
 
+export interface RecommendationEvidence {
+  kind: string;
+  term: string;
+  matchedProfile: string;
+}
+
+export interface DomainCandidate {
+  id: string;
+  label: string;
+  score: number;
+  covered: boolean;
+  reason: string;
+  evidence?: RecommendationEvidence[];
+}
+
+export interface ValueCandidate {
+  value: string;
+  score: number;
+  reason: string;
+  evidence?: RecommendationEvidence[];
+}
+
+export interface RegistrationSuggestionInput {
+  resourceType?: ResourceType | null;
+  name: string;
+  description: string;
+  endpoint?: string | null;
+  manifestText?: string | null;
+  schemaText?: string | null;
+  locale?: string | null;
+}
+
+export interface RegistrationSuggestionResult {
+  authorizedDomains: DomainCandidate[];
+  outOfScopeDomainHints: DomainCandidate[];
+  capabilityTags: ValueCandidate[];
+  resourceTypeHints: ValueCandidate[];
+  protocolHints: ValueCandidate[];
+  warnings?: string[];
+}
+
+export interface RegistrationDomainCatalogEntry {
+  id: string;
+  label: string;
+  aliases?: string[];
+  selectable?: boolean;
+  [key: string]: unknown;
+}
+
+export interface RegistrationDomainCatalogResponse {
+  registrarDid?: string;
+  authorizedDomains?: string[];
+  catalogVersion?: number;
+  snapshotHash?: string | null;
+  domains?: RegistrationDomainCatalogEntry[];
+  [key: string]: unknown;
+}
+
 export interface RegistrarStatusResponse {
   status?: string;
   did?: string;
@@ -328,7 +386,35 @@ export interface DiscoveryAuthorizedDomainsResponse {
 
 export interface CapabilityTagSuggestionResponse {
   suggestions?: string[];
+  capabilityTags?: ValueCandidate[];
   [key: string]: unknown;
+}
+
+export interface CapabilityTagNormalizeRequest {
+  tags: string[];
+}
+
+export interface CapabilityTagNormalizeResponse {
+  tags: string[];
+  capabilityTags?: string[];
+  [key: string]: unknown;
+}
+
+export interface DiscoverySuggestionInput {
+  query: string;
+  currentResourceType?: ResourceType | null;
+  currentProtocol?: string | null;
+  currentCapabilityTags?: string[];
+  locale?: string | null;
+}
+
+export interface DiscoverySuggestionResult {
+  queryRewrite?: string | null;
+  capabilityTags: ValueCandidate[];
+  resourceTypes: ValueCandidate[];
+  protocols: ValueCandidate[];
+  authorizedDomainHints: DomainCandidate[];
+  warnings?: string[];
 }
 
 export interface RootResourceVersionListResponse {

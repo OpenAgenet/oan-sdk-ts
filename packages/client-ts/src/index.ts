@@ -4,14 +4,20 @@
 // Email: jlxufly@gmail.com
 
 import type {
+  CapabilityTagNormalizeResponse,
   CapabilityTagSuggestionResponse,
   CdnStatusResponse,
+  DiscoverySuggestionInput,
+  DiscoverySuggestionResult,
   DiscoveryAuthorizedDomainsResponse,
   ResourceDiscoveryExplainResponse,
   DiscoveryStatusResponse,
   DiscoveryVisibilityResponse,
   OanLifecycleSnapshot,
   OanWorkflowStage,
+  RegistrationDomainCatalogResponse,
+  RegistrationSuggestionInput,
+  RegistrationSuggestionResult,
   RegistrarStatusResponse,
   ResourceRegistrationResponse,
   ResourceRegistrationSubmission,
@@ -83,7 +89,7 @@ export class OanClient {
   private readonly options: OanClientResolvedEndpoints;
 
   constructor(options: OanClientOptions = {}) {
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
     const baseUrl = normalizeEndpoint(options.baseUrl ?? DEFAULT_OAN_OFFICIAL_ENDPOINTS.baseUrl);
     this.options = {
       registrarEndpoint: options.registrarEndpoint ?? baseUrl,
@@ -127,6 +133,31 @@ export class OanClient {
     return this.postJson<CapabilityTagSuggestionResponse>(
       this.requireEndpoint("registrarEndpoint", "/capability-tags/suggest"),
       payload,
+    );
+  }
+
+  async normalizeCapabilityTags(tags: string[]): Promise<CapabilityTagNormalizeResponse> {
+    return this.postJson<CapabilityTagNormalizeResponse>(
+      this.requireEndpoint("registrarEndpoint", "/capability-tags/normalize"),
+      { tags },
+    );
+  }
+
+  async getRegistrationDomainCatalog(): Promise<RegistrationDomainCatalogResponse> {
+    return this.getJson(this.requireEndpoint("registrarEndpoint", "/registration/domain-catalog"));
+  }
+
+  async suggestRegistrationMetadata(input: RegistrationSuggestionInput): Promise<RegistrationSuggestionResult> {
+    return this.postJson<RegistrationSuggestionResult>(
+      this.requireEndpoint("registrarEndpoint", "/registration/suggestions"),
+      input,
+    );
+  }
+
+  async suggestDiscoveryQuery(input: DiscoverySuggestionInput): Promise<DiscoverySuggestionResult> {
+    return this.postJson<DiscoverySuggestionResult>(
+      this.requireEndpoint("discoveryEndpoint", "/discovery/query/suggestions"),
+      input,
     );
   }
 

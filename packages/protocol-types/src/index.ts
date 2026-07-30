@@ -443,6 +443,7 @@ export interface OanLifecycleSnapshot {
   stage: OanWorkflowStage;
   registrarRecord?: unknown;
   rootResource?: unknown;
+  rootVersions?: RootResourceVersionListResponse;
   cdnPackage?: ResourcePackage | null;
   discoveryVisibility?: DiscoveryVisibilityResponse;
   registrarStatus?: RegistrarStatusResponse;

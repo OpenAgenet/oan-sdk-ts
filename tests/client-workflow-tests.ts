@@ -33,6 +33,7 @@ function createFetchStub(
 }
 
 const resourceDid = "did:oan:SKDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz";
+const versionOnlyResourceDid = "did:oan:SKDM:9KvVersionOnlyRoot2WfHa4Cd5Ej8LgNz";
 const submission: ResourceRegistrationSubmission = {
   resourceDid,
   resourceType: "skill",
@@ -166,6 +167,24 @@ const fetchStub = createFetchStub({
       },
     },
   },
+  [`GET https://root.example/root/resources/${encodeURIComponent(resourceDid)}/versions`]: {
+    body: {
+      did: resourceDid,
+      items: [{ packageVersion: "1.0.0", didDocumentHash: "sha256:did" }],
+    },
+  },
+  [`GET https://root.example/root/resources/${encodeURIComponent(versionOnlyResourceDid)}`]: {
+    body: {
+      resourceDid: versionOnlyResourceDid,
+      package: null,
+    },
+  },
+  [`GET https://root.example/root/resources/${encodeURIComponent(versionOnlyResourceDid)}/versions`]: {
+    body: {
+      did: versionOnlyResourceDid,
+      items: [{ packageVersion: "1.0.0", didDocumentHash: "sha256:did" }],
+    },
+  },
   "GET https://cdn.example/cdn/status": {
     body: {
       status: "ok",
@@ -228,7 +247,7 @@ const fetchStub = createFetchStub({
   "POST https://discovery.example/discovery/index/resources/visibility": {
     body: {
       resourceDids: [resourceDid],
-      visible: [resourceDid],
+      visible: [resourceDid, versionOnlyResourceDid],
     },
   },
   "POST https://discovery.example/discovery/query/explain": {
@@ -373,6 +392,13 @@ assert(snapshot.rootObserved, "root should observe resource");
 assert(snapshot.cdnObserved, "cdn should observe package");
 assert(snapshot.discoveryVisible, "discovery should observe visibility");
 assert(snapshot.stage === "visible-in-discovery", "stage should normalize to visible-in-discovery");
+
+const versionOnlySnapshot = await client.observeLifecycle(versionOnlyResourceDid);
+assert(versionOnlySnapshot.rootObserved, "root version history should count as root observation");
+assert(
+  versionOnlySnapshot.observations?.includes("root version history exists"),
+  "root version observation should be recorded",
+);
 
 const polledStages: string[] = [];
 const visibleSnapshot = await client.observeLifecycleUntilVisible(resourceDid, {

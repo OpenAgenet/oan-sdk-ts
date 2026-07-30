@@ -249,16 +249,18 @@ export class OanClient {
       this.tryGet(() => this.getDiscoveryStatus()),
     ]);
 
-    const [registrarRecord, rootResource, cdnPackage, discoveryVisibility] = await Promise.all([
+    const [registrarRecord, rootResource, rootVersions, cdnPackage, discoveryVisibility] = await Promise.all([
       this.tryGet(() => this.getRegistrarResource(resourceDid)),
       this.tryGet(() => this.getRootResource(resourceDid)),
+      this.tryGet(() => this.getRootResourceVersions(resourceDid)),
       this.tryGet(() => this.getCdnResourcePackage(resourceDid)),
       this.tryGet(() => this.getDiscoveryVisibility(resourceDid)),
     ]);
 
     const observations: string[] = [];
     const registrarAccepted = registrarRecord !== undefined && registrarRecord !== null;
-    const rootObserved = rootResource !== undefined && rootResource !== null;
+    const rootVersionObserved = Array.isArray(rootVersions?.items) && rootVersions.items.length > 0;
+    const rootObserved = (rootResource !== undefined && rootResource !== null) || rootVersionObserved;
     const cdnObserved = cdnPackage !== undefined && cdnPackage !== null;
     const visibleList = Array.isArray(discoveryVisibility?.visible)
       ? discoveryVisibility.visible.map(String)
@@ -266,6 +268,9 @@ export class OanClient {
     const discoveryVisible = visibleList.includes(resourceDid);
     if (registrarAccepted) observations.push("registrar record exists");
     if (rootObserved) observations.push("root package exists");
+    if (rootVersionObserved && (rootResource === undefined || rootResource === null)) {
+      observations.push("root version history exists");
+    }
     if (cdnObserved) observations.push("cdn package exists");
     if (discoveryVisible) observations.push("discovery index visibility confirmed");
     if (!rootObserved && registrarAccepted && hasQueuedRootWork(rootStatus)) {
@@ -287,6 +292,7 @@ export class OanClient {
       }),
       registrarRecord,
       rootResource,
+      rootVersions,
       cdnPackage,
       discoveryVisibility,
       registrarStatus,

@@ -127,6 +127,11 @@ export function createResourceDidDocumentDraft(options: ResourceDraftOptions): D
   const normalizedDid = normalizeDidOan(options.resourceDid);
   const version = options.version ?? "1.0.0";
   const hashAlgorithm = options.hashAlgorithm ?? "sha256";
+  const packageHash =
+    options.packageHash ??
+    (options.resourceType === "skill" && (options.manifestUrl || options.downloadUrl)
+      ? "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      : undefined);
   const keyId = `${normalizedDid}#key-1`;
   const normalizedOptions = { ...options, resourceDid: normalizedDid };
   const service = buildDefaultService(normalizedOptions, version);
@@ -178,7 +183,7 @@ export function createResourceDidDocumentDraft(options: ResourceDraftOptions): D
         manifestUrl: options.manifestUrl,
         downloadUrl: options.downloadUrl,
         schemaUrl: options.schemaUrl,
-        packageHash: options.packageHash,
+        packageHash,
         metadataHash: options.metadataHash,
         hashAlgorithm,
         version,

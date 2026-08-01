@@ -1,9 +1,41 @@
 {
-  "name": "oan-sdk-ts",
-  "private": true,
+  "name": "@openagenet/oan-sdk-ts",
   "version": "0.1.0",
   "type": "module",
+  "license": "Apache-2.0",
+  "description": "TypeScript SDK and helper packages for OAN protocol clients, discovery, and governance inspection.",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE.md"
+  ],
+  "main": "./dist/packages/sdk-ts/src/index.js",
+  "types": "./dist/packages/sdk-ts/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/packages/sdk-ts/src/index.d.ts",
+      "default": "./dist/packages/sdk-ts/src/index.js"
+    },
+    "./client": {
+      "types": "./dist/packages/client-ts/src/index.d.ts",
+      "default": "./dist/packages/client-ts/src/index.js"
+    },
+    "./governance": {
+      "types": "./dist/packages/governance-ts/src/index.d.ts",
+      "default": "./dist/packages/governance-ts/src/index.js"
+    },
+    "./protocol-types": {
+      "types": "./dist/packages/protocol-types/src/index.d.ts",
+      "default": "./dist/packages/protocol-types/src/index.js"
+    }
+  },
   "scripts": {
+    "build": "node ./node_modules/typescript/bin/tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
     "test": "node ./node_modules/tsx/dist/cli.mjs tests/sdk-core-tests.ts && node ./node_modules/tsx/dist/cli.mjs tests/client-workflow-tests.ts && node ./node_modules/tsx/dist/cli.mjs tests/identity-store-node-tests.ts"
   },

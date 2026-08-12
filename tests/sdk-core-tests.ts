@@ -327,6 +327,14 @@ const builtQuery = buildDiscoveryQuery({
 });
 assert(builtQuery.query === "legal skill", "query should be trimmed");
 assert(builtQuery.capabilityTags?.[0] === "legal.contract-review", "capability tag should be normalized");
+const queryWithoutResourceType = buildDiscoveryQuery({
+  query: "legal skill",
+  resourceType: "" as any,
+});
+assert(
+  queryWithoutResourceType.resourceType === undefined,
+  "empty resource type should be omitted",
+);
 
 const trustSummary = summarizeTrustFromPackage(pkg);
 assert(trustSummary.level === "verified", "package trust summary should be verified");

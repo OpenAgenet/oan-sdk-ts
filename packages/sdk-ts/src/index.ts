@@ -425,7 +425,10 @@ export function buildDiscoveryQuery(
     : undefined;
   return {
     query: query && query.length > 0 ? query : undefined,
-    resourceType: input.resourceType,
+    resourceType:
+      typeof input.resourceType === "string" && input.resourceType.trim()
+        ? input.resourceType
+        : undefined,
     capabilityTags: capabilityTags && capabilityTags.length > 0 ? capabilityTags : undefined,
     protocol: typeof input.protocol === "string" && input.protocol.trim() ? input.protocol.trim() : undefined,
     version: typeof input.version === "string" && input.version.trim() ? input.version.trim() : undefined,

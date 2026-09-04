@@ -1,6 +1,6 @@
 {
   "name": "@openagenet/oan-sdk-ts",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "license": "Apache-2.0",
   "description": "TypeScript SDK and helper packages for OAN protocol clients, discovery, and governance inspection.",
@@ -31,6 +31,10 @@
     "./protocol-types": {
       "types": "./dist/packages/protocol-types/src/index.d.ts",
       "default": "./dist/packages/protocol-types/src/index.js"
+    },
+    "./identity-store-node": {
+      "types": "./dist/packages/sdk-ts/src/identity-store-node.d.ts",
+      "default": "./dist/packages/sdk-ts/src/identity-store-node.js"
     }
   },
   "scripts": {

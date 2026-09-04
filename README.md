@@ -6,12 +6,21 @@ Email: jlxufly@gmail.com
 
 # OAN SDK TypeScript
 
-TypeScript SDKs for OpenAgenet clients, Discovery access, and developer tools.
+TypeScript SDK for OpenAgenet (OAN), an open infrastructure project for the
+Internet of Agents (IoA). The SDK gives applications, skills, and developer
+tools a typed way to work with DID-based OAN resource registration, semantic
+discovery, lifecycle checks, and verification before invocation.
 
 The active SDK surface is resource-oriented and uses `did:oan` identifiers.
 Client code should discover and verify Resource packages for Agent Service,
 Skill, MCP Server, and Tool/API resources instead of using legacy Agent-only
 routes.
+
+Published package:
+
+```powershell
+npm install @openagenet/oan-sdk-ts
+```
 
 ## Packages
 
@@ -29,38 +38,98 @@ routes.
 Discovery returns verified resource metadata and artifact references. It is not
 treated as a download proxy for external Skill files or other artifacts.
 
-## Official Endpoint Defaults
+## Typical Use Cases
 
-`packages/client-ts` exports `DEFAULT_OAN_OFFICIAL_ENDPOINTS` and `OanClient`
-uses those values when options are omitted. The default profile targets the
-official OAN base URL:
+Use this SDK when you need a typed client layer for OAN rather than raw HTTP
+calls. Common scenarios include:
 
-- Base URL: `https://api.openagenet.xyz`
+- a backend service that registers an Agent Service, Skill, MCP Server, or
+  Tool/API resource through the official gateway
+- a CLI or internal tool that checks whether a resource is already visible in
+  Discovery before an operator publishes it downstream
+- a browser or portal feature that needs to query resource summaries, status,
+  or trust evidence from the same origin as the official website
+- a governance or operations tool that inspects Root, Registrar, Discovery, or
+  Trust Indexer read surfaces without reimplementing request shapes
 
-By default, `OanClient` derives Registrar, Discovery, Root, and CDN calls from
-that base URL. Third-party operators can expose the same route shape behind
-their own base URL:
+The usual flow is:
+
+1. create an `OanClient`
+2. point it at the official gateway or a custom topology
+3. call the resource or status method you need
+4. inspect the returned DID Document, resource package, or trust summary
+
+For example, a community app can use the SDK to submit a registration draft for
+the OAN community skill resource, then verify discovery visibility and inspect
+why a query matched:
 
 ```ts
-new OanClient({ baseUrl: "https://oan.example.com" });
+import { OanClient } from "@openagenet/oan-sdk-ts/client";
+
+const client = new OanClient({ baseUrl: "https://www.openagenet.xyz" });
+
+const submission = {
+  resourceDid: "did:oan:SKexamplecommunityskill001",
+  resourceType: "skill",
+  packageVersion: "1.0.0",
+  metadataHash: "sha256:community-skill-metadata",
+  packageHash: "sha256:community-skill-package",
+  hashAlgorithm: "sha-256",
+  didDocument: {
+    id: "did:oan:SKexamplecommunityskill001",
+    oanMetadata: {
+      resourceType: "skill",
+      subjectType: "skill",
+      name: "OAN Community Skill",
+      description: "A practical skill for OAN registration and discovery flows.",
+      endpoint: "https://www.openagenet.xyz/register",
+    },
+  },
+};
+
+const registration = await client.registerResource(submission);
+const discovery = await client.discoverResources({
+  query: "I need a tool that can search code repositories and summarize the project structure.",
+});
+const explanation = await client.explainDiscoveryQuery({
+  query: "I need a tool that can search code repositories and summarize the project structure.",
+});
 ```
 
-Advanced users and operators can still override individual node endpoints:
+## Public Website Gateway
 
-- Registrar: `https://registrar.openagenet.xyz`
-- Discovery: `https://discovery.openagenet.xyz`
-- Root: `https://root.openagenet.xyz`
-- CDN: `https://cdn.openagenet.xyz`
+For browser-facing and community workflows, use the official public website as
+the same-origin OAN gateway:
 
-Explicit node endpoints take precedence over `baseUrl` for their corresponding
-node. Keep official defaults centralized in the SDK so future IP, domain, or
-route migration can be handled in one place instead of scattered through apps
-and skills.
+- Base URL: `https://www.openagenet.xyz`
+
+The public gateway exposes the route shape used by the website and community
+skill:
+
+- `POST /resources/register`
+- `POST /discovery/resources/query`
+- `GET /registrar/status`
+- `GET /discovery/status`
+- `GET /root/status`
+- `GET /cdn/status`
+- `GET /trust/v1/status`
+
+Pass that base URL explicitly when building public-client integrations:
+
+```ts
+import { OanClient } from "@openagenet/oan-sdk-ts/client";
+
+const client = new OanClient({ baseUrl: "https://www.openagenet.xyz" });
+```
+
+Third-party operators can expose the same route shape behind their own base URL.
+Advanced users and operators can still override individual Registrar,
+Discovery, Root, CDN, or Trust Indexer endpoints when testing a custom topology.
 
 ## License
 
 This SDK repository is licensed under `Apache-2.0` to keep developer adoption
-and ecosystem integration low-friction. Brand and official OpenAgenet / OAN
+and ecosystem integration low-friction. Brand and official OpenAgenet (OAN)
 identity rights are reserved separately.
 
 ## Resource Draft Helpers
@@ -103,9 +172,9 @@ It now additionally provides browser- and portal-friendly helper surfaces for:
 
 This makes `oan-sdk-ts` suitable not only for developer tools and
 `oan-community-skill`, but also as the preferred protocol-facing client layer
-for future browser products such as `oan-homepage`.
+for browser products such as `oan-homepage`.
 
 `oan-community-skill` is expected to build community-facing AI workflows on top
 of this SDK layer rather than duplicating raw HTTP, type, or
 trust-verification logic. Official deployment, benchmark, and governance
-automation belongs in `oan-official-skill`.
+automation are maintained separately by official operators.

@@ -9,6 +9,7 @@ import {
   buildDiscoveryQuery,
   createAgentIdentity,
   createAgentServiceDraft,
+  attachControllerAuthorizationProof,
   createDefaultSubjectIdentity,
   createEmptyIdentityStoreSnapshot,
   createMcpServerDraft,
@@ -375,6 +376,63 @@ assert(
   "identity-backed submission authorized domain mismatch",
 );
 assert(identitySubmission.didDocument.verificationMethod?.[0]?.publicKeyJwk, "identity-backed draft should carry publicKeyJwk");
+identitySubmission.didDocumentHash = "sha256:sdk-test-did-document";
+await attachControllerAuthorizationProof(identitySubmission, {
+  controllerIdentity: subjectIdentity,
+  registrarDid: "did:oan:INRG:sdk-test",
+});
+const controllerProof = identitySubmission.controllerAuthorizationProof;
+assert(controllerProof, "controllerAuthorizationProof should be attached");
+assert(
+  controllerProof.challenge.controllerDid === subjectIdentity.did,
+  "controller proof should bind subject identity as controller",
+);
+assert(
+  controllerProof.challenge.resourceDid === agentIdentity.did,
+  "controller proof should bind resource DID",
+);
+assert(
+  !JSON.stringify(identitySubmission).includes("privateKeyJwk"),
+  "controller proof submission should not contain privateKeyJwk",
+);
+const verifyKey = await globalThis.crypto.subtle.importKey(
+  "jwk",
+  subjectIdentity.publicKeyJwk as JsonWebKey,
+  { name: "Ed25519" },
+  false,
+  ["verify"],
+);
+const signature = base64UrlToBytes(controllerProof.proof.proofValue);
+const verified = await globalThis.crypto.subtle.verify(
+  { name: "Ed25519" },
+  verifyKey,
+  signature.buffer as ArrayBuffer,
+  new TextEncoder().encode(testCanonicalJson(controllerProof.challenge)),
+);
+assert(verified, "controllerAuthorizationProof signature should verify");
+const mismatchedSubmission = createRegistrationSubmissionFromIdentity(agentIdentity, {
+  manifestUrl: "https://example.org/skills/sdk-test.json",
+  packageHash: "sha256:sdk-test-package",
+  metadataHash: "sha256:sdk-test-metadata",
+});
+mismatchedSubmission.didDocumentHash = "sha256:sdk-test-did-document";
+mismatchedSubmission.didDocument.oanMetadata = {
+  ...(mismatchedSubmission.didDocument.oanMetadata ?? {
+    subjectType: "skill",
+    resourceType: "skill",
+  }),
+  controllerDid: "did:oan:DVDM:11111111111111111111111111111111",
+};
+let mismatchRejected = false;
+try {
+  await attachControllerAuthorizationProof(mismatchedSubmission, {
+    controllerIdentity: subjectIdentity,
+    registrarDid: "did:oan:INRG:sdk-test",
+  });
+} catch (error) {
+  mismatchRejected = error instanceof Error && error.message === "controller_identity_mismatch";
+}
+assert(mismatchRejected, "controller DID mismatch should be rejected before signing");
 
 let identityStore = createEmptyIdentityStoreSnapshot();
 identityStore = upsertIdentityRecord(identityStore, subjectIdentity);
@@ -385,3 +443,17 @@ assert(importedBundle.subjects.length === 1, "imported bundle subject count mism
 assert(importedBundle.agents.length === 1, "imported bundle agent count mismatch");
 
 console.log("sdk core tests passed");
+
+function testCanonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(testCanonicalJson).join(",")}]`;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, entryValue]) => entryValue !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right));
+  return `{${entries.map(([key, entryValue]) => `${JSON.stringify(key)}:${testCanonicalJson(entryValue)}`).join(",")}}`;
+}
+
+function base64UrlToBytes(value: string): Uint8Array {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+  return Uint8Array.from(globalThis.atob(base64), (char) => char.charCodeAt(0));
+}

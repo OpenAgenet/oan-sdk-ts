@@ -163,6 +163,7 @@ export function createResourceDidDocumentDraft(options: ResourceDraftOptions): D
     ],
     authentication: [keyId],
     assertionMethod: [keyId],
+    capabilityInvocation: [keyId],
     service: service ? [service] : [],
     oanMetadata: {
       subjectType: options.resourceType,

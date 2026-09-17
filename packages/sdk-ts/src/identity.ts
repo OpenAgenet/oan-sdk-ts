@@ -4,6 +4,8 @@
 // Email: jlxufly@gmail.com
 
 import type {
+  ControllerAuthorizationProofBundle,
+  DataIntegrityProof,
   DidDocument,
   ResourceRegistrationSubmission,
   ResourceType,
@@ -80,6 +82,13 @@ export interface RegistrationMaterialOptions {
   authorizedDomains?: string[];
   description?: string;
   packageInfo?: Record<string, unknown>;
+}
+
+export interface ControllerAuthorizationProofOptions {
+  controllerIdentity: OanIdentityRecord;
+  registrarDid: string;
+  ttlMs?: number;
+  now?: Date;
 }
 
 const SUBJECT_CODE_BY_RESOURCE_TYPE: Record<ResourceType, string> = {
@@ -280,6 +289,44 @@ export function createRegistrationSubmissionFromIdentity(
   };
 }
 
+export async function attachControllerAuthorizationProof(
+  submission: ResourceRegistrationSubmission,
+  options: ControllerAuthorizationProofOptions,
+): Promise<ResourceRegistrationSubmission> {
+  if (!submission.didDocumentHash || !submission.metadataHash) {
+    throw new Error("missing_hashes_for_controller_authorization");
+  }
+  const controllerDid = submission.didDocument.oanMetadata?.controllerDid ?? options.controllerIdentity.did;
+  if (controllerDid !== options.controllerIdentity.did) {
+    throw new Error("controller_identity_mismatch");
+  }
+  const now = options.now ?? new Date();
+  const verificationMethod =
+    options.controllerIdentity.verificationMethodId || `${options.controllerIdentity.did}#key-1`;
+  const challenge = {
+    challengeId: `controller-auth-${now.getTime().toString(36)}-${randomBase58(8)}`,
+    resourceDid: submission.resourceDid,
+    controllerDid,
+    publisherDid: submission.didDocument.oanMetadata?.publisherDid,
+    didDocumentHash: submission.didDocumentHash,
+    metadataHash: submission.metadataHash,
+    registrarDid: options.registrarDid,
+    purpose: "resource-registration-controller-authorization",
+    verificationMethod,
+    nonce: randomBase58(24),
+    issuedAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + (options.ttlMs ?? 5 * 60 * 1000)).toISOString(),
+  };
+  const proof = await signDataIntegrityProof(challenge, options.controllerIdentity, "capabilityInvocation");
+  const bundle: ControllerAuthorizationProofBundle = {
+    challenge,
+    controllerDidDocument: sanitizeControllerDidDocument(options.controllerIdentity),
+    proof,
+  };
+  submission.controllerAuthorizationProof = bundle;
+  return submission;
+}
+
 export function createDidOan(resourceType: ResourceType, domainCode = "DM"): string {
   const subjectCode = SUBJECT_CODE_BY_RESOURCE_TYPE[resourceType];
   if (!subjectCode) {
@@ -294,6 +341,110 @@ export function normalizeDomainCode(value = "DM"): string {
     throw new Error("invalid_domain_code");
   }
   return normalized;
+}
+
+function sanitizeControllerDidDocument(record: OanIdentityRecord): DidDocument {
+  const didDocument = JSON.parse(JSON.stringify(record.didDocument)) as DidDocument;
+  didDocument.id = record.did;
+  didDocument.verificationMethod = [
+    {
+      ...(didDocument.verificationMethod?.[0] ?? {
+        id: record.verificationMethodId,
+        type: "Ed25519VerificationKey2020",
+        controller: record.did,
+      }),
+      id: record.verificationMethodId,
+      controller: record.did,
+      publicKeyJwk: record.publicKeyJwk,
+      publicKeyMultibase: undefined,
+    },
+  ];
+  didDocument.authentication = didDocument.authentication?.length
+    ? didDocument.authentication
+    : [record.verificationMethodId];
+  didDocument.assertionMethod = didDocument.assertionMethod?.length
+    ? didDocument.assertionMethod
+    : [record.verificationMethodId];
+  didDocument.capabilityInvocation = didDocument.capabilityInvocation?.length
+    ? didDocument.capabilityInvocation
+    : [record.verificationMethodId];
+  return removePrivateKeyMaterial(didDocument) as DidDocument;
+}
+
+async function signDataIntegrityProof(
+  payload: unknown,
+  record: OanIdentityRecord,
+  proofPurpose: string,
+): Promise<DataIntegrityProof> {
+  const privateKey = await globalThis.crypto.subtle.importKey(
+    "jwk",
+    record.privateKeyJwk as JsonWebKey,
+    { name: "Ed25519" },
+    false,
+    ["sign"],
+  );
+  const signature = await globalThis.crypto.subtle.sign(
+    { name: "Ed25519" },
+    privateKey,
+    new TextEncoder().encode(canonicalJson(payload)),
+  );
+  return {
+    type: "Ed25519Signature2020",
+    creator: record.did,
+    created: new Date().toISOString(),
+    proofPurpose,
+    proofValue: base64Url(new Uint8Array(signature)),
+    cryptoSuite: "Ed25519Sha256",
+    hashAlgorithm: "SHA-256",
+    verificationMethod: record.verificationMethodId,
+  };
+}
+
+function removePrivateKeyMaterial(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(removePrivateKeyMaterial);
+  if (!value || typeof value !== "object") return value;
+  const output: Record<string, unknown> = {};
+  for (const [key, entryValue] of Object.entries(value as Record<string, unknown>)) {
+    if (
+      key === "privateKeyJwk" ||
+      key === "privateKeyMultibase" ||
+      key === "privateKeyBase58" ||
+      key === "privateKeyHex" ||
+      key === "d"
+    ) {
+      continue;
+    }
+    output[key] = removePrivateKeyMaterial(entryValue);
+  }
+  return output;
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, entryValue]) => entryValue !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right));
+  return `{${entries.map(([key, entryValue]) => `${JSON.stringify(key)}:${canonicalJson(entryValue)}`).join(",")}}`;
+}
+
+function base64Url(bytes: Uint8Array): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  let output = "";
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = bytes[index];
+    const second = bytes[index + 1];
+    const third = bytes[index + 2];
+    output += alphabet[first >> 2];
+    output += alphabet[((first & 0x03) << 4) | ((second ?? 0) >> 4)];
+    if (index + 1 < bytes.length) {
+      output += alphabet[((second & 0x0f) << 2) | ((third ?? 0) >> 6)];
+    }
+    if (index + 2 < bytes.length) {
+      output += alphabet[third & 0x3f];
+    }
+  }
+  return output;
 }
 
 function bucketForKind(

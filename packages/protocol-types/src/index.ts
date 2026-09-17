@@ -20,6 +20,7 @@ export interface DidDocument {
   verificationMethod?: VerificationMethod[];
   authentication?: string[];
   assertionMethod?: string[];
+  capabilityInvocation?: string[];
   service?: ServiceEndpoint[];
   oanMetadata?: OanMetadata;
   [key: string]: unknown;
@@ -123,6 +124,48 @@ export interface DataIntegrityProof {
   cryptoSuite?: string;
   hashAlgorithm?: string;
   [key: string]: unknown;
+}
+
+export interface DidControlChallenge {
+  challengeId: string;
+  draftId: string;
+  subjectDid: string;
+  didDocumentHash: string;
+  registrarDid: string;
+  purpose: string;
+  verificationMethod: string;
+  nonce: string;
+  issuedAt: string;
+  expiresAt: string;
+}
+
+export interface SubjectControlProofBundle {
+  challenge: DidControlChallenge;
+  proof: DataIntegrityProof;
+  verifiedAt?: string;
+  verifiedVerificationMethod?: string;
+  proofHash?: string;
+}
+
+export interface ControllerAuthorizationChallenge {
+  challengeId: string;
+  resourceDid: string;
+  controllerDid: string;
+  publisherDid?: string;
+  didDocumentHash: string;
+  metadataHash: string;
+  registrarDid: string;
+  purpose: "resource-registration-controller-authorization" | string;
+  verificationMethod: string;
+  nonce: string;
+  issuedAt: string;
+  expiresAt: string;
+}
+
+export interface ControllerAuthorizationProofBundle {
+  challenge: ControllerAuthorizationChallenge;
+  controllerDidDocument: DidDocument;
+  proof: DataIntegrityProof;
 }
 
 export interface ResourceMetadata {
@@ -237,11 +280,15 @@ export interface ResourceRegistrationSubmission {
   resourceDid: string;
   resourceType: ResourceType;
   didDocument: DidDocument;
+  didDocumentHash?: string;
+  metadata?: unknown;
   packageVersion: string;
   metadataHash: string;
   packageHash: string;
   hashAlgorithm: string;
   registrationCredential?: unknown;
+  subjectControlProof?: SubjectControlProofBundle;
+  controllerAuthorizationProof?: ControllerAuthorizationProofBundle;
   [key: string]: unknown;
 }
 

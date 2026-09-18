@@ -35,6 +35,9 @@ function createFetchStub(
 const resourceDid = "did:oan:SKDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz";
 const versionOnlyResourceDid = "did:oan:SKDM:9KvVersionOnlyRoot2WfHa4Cd5Ej8LgNz";
 const secondCdnResourceDid = "did:oan:SKDM:8MvSecondCdnPage2WfHa4Cd5Ej8LgNz";
+const secondRegistrarResourceDid = "did:oan:SKDM:2RgSecondRegistrarPage2WfHa4Cd5Ej8";
+const firstDiscoveryResourceDid = "did:oan:SKDM:3DsFirstDiscoveryPage2WfHa4Cd5Ej8";
+const secondDiscoveryResourceDid = "did:oan:SKDM:4DsSecondDiscoveryPage2WfHa4Cd5Ej8";
 const submission: ResourceRegistrationSubmission = {
   resourceDid,
   resourceType: "skill",
@@ -142,6 +145,33 @@ const fetchStub = createFetchStub({
       authorization: { status: "authorized" },
     },
   },
+  "GET https://registrar.example/resources?limit=1": {
+    body: {
+      items: [{ resourceDid, resourceType: "skill", status: "submitted" }],
+      count: 1,
+      afterDid: null,
+      nextDid: resourceDid,
+      hasMore: true,
+    },
+  },
+  "GET https://registrar.example/resources?limit=100": {
+    body: {
+      items: [{ resourceDid, resourceType: "skill", status: "submitted" }],
+      count: 1,
+      afterDid: null,
+      nextDid: resourceDid,
+      hasMore: true,
+    },
+  },
+  [`GET https://registrar.example/resources?afterDid=${encodeURIComponent(resourceDid)}&limit=1`]: {
+    body: {
+      items: [{ resourceDid: secondRegistrarResourceDid, resourceType: "skill", status: "submitted" }],
+      count: 1,
+      afterDid: resourceDid,
+      nextDid: null,
+      hasMore: false,
+    },
+  },
   "POST https://registrar.example/capability-tags/suggest": {
     body: {
       suggestions: ["protocol.mcp"],
@@ -219,7 +249,7 @@ const fetchStub = createFetchStub({
       resourceCount: 1,
     },
   },
-  "GET https://cdn.example/cdn/resources/index?afterCursor=0": {
+  "GET https://cdn.example/cdn/resources/index?afterCursor=0&limit=100": {
     body: {
       items: [{ cursor: 1, package: createResourcePackage(resourceDid) }],
       count: 1,
@@ -298,6 +328,74 @@ const fetchStub = createFetchStub({
       protocols: [{ value: "mcp", score: 0.9, reason: "matched" }],
       authorizedDomainHints: [{ id: "technology.security", label: "Security", score: 0.7, covered: true, reason: "matched" }],
       warnings: [],
+    },
+  },
+  "GET https://discovery.example/discovery/index/resources?afterCursor=0&limit=1": {
+    body: {
+      items: [{ resourceDid: firstDiscoveryResourceDid, cursor: 7, resourceType: "skill" }],
+      count: 1,
+      afterCursor: 0,
+      afterResourceDid: null,
+      nextCursor: 7,
+      nextResourceDid: firstDiscoveryResourceDid,
+      hasMore: true,
+    },
+  },
+  [`GET https://discovery.example/discovery/index/resources?afterCursor=7&limit=1&afterResourceDid=${encodeURIComponent(firstDiscoveryResourceDid)}`]: {
+    body: {
+      items: [{ resourceDid: secondDiscoveryResourceDid, cursor: 7, resourceType: "skill" }],
+      count: 1,
+      afterCursor: 7,
+      afterResourceDid: firstDiscoveryResourceDid,
+      nextCursor: 7,
+      nextResourceDid: secondDiscoveryResourceDid,
+      hasMore: false,
+    },
+  },
+  "GET https://broken-discovery.example/discovery/index/resources?afterCursor=0&limit=1": {
+    body: {
+      items: [],
+      count: 0,
+      afterCursor: 0,
+      nextCursor: 0,
+      nextResourceDid: null,
+      hasMore: true,
+    },
+  },
+  "GET https://broken-cdn.example/cdn/resources/index?afterCursor=0&limit=100": {
+    body: {
+      items: [{ cursor: 1 }],
+      count: 1,
+      afterCursor: 0,
+      nextCursor: 1,
+      hasMore: false,
+    },
+  },
+  "GET https://broken-registrar.example/resources?limit=100": {
+    body: {
+      items: [{ resourceDid, resourceType: "skill", status: "submitted" }],
+      count: 2,
+      afterDid: null,
+      nextDid: null,
+      hasMore: false,
+    },
+  },
+  "GET https://stuck-registrar.example/resources?limit=1": {
+    body: {
+      items: [{ resourceDid, resourceType: "skill", status: "submitted" }],
+      count: 1,
+      afterDid: null,
+      nextDid: resourceDid,
+      hasMore: true,
+    },
+  },
+  [`GET https://stuck-registrar.example/resources?afterDid=${encodeURIComponent(resourceDid)}&limit=1`]: {
+    body: {
+      items: [{ resourceDid: secondRegistrarResourceDid, resourceType: "skill", status: "submitted" }],
+      count: 1,
+      afterDid: resourceDid,
+      nextDid: resourceDid,
+      hasMore: true,
     },
   },
   "GET https://indexer.example/v1/summary": {
@@ -415,6 +513,59 @@ assert(discoverySuggestions.protocols[0]?.value === "mcp", "discovery suggestion
 const registrarRootAuthorization = await client.getRegistrarRootAuthorization();
 assert(registrarRootAuthorization.rootReachable, "registrar root authorization reachability mismatch");
 
+const registrarFirstPage = await client.getRegistrarResourcesPage();
+assert(registrarFirstPage.items[0]?.resourceDid === resourceDid, "registrar default page mismatch");
+
+const iteratedRegistrarResources: string[] = [];
+for await (const record of client.iterateRegistrarResources({ pageSize: 1 })) {
+  iteratedRegistrarResources.push(String(record.resourceDid));
+}
+assert(
+  iteratedRegistrarResources.join(",") === `${resourceDid},${secondRegistrarResourceDid}`,
+  "registrar paginated iterator mismatch",
+);
+
+const boundedRegistrarResources: string[] = [];
+for await (const record of client.iterateRegistrarResources({ pageSize: 1, maxItems: 1 })) {
+  boundedRegistrarResources.push(String(record.resourceDid));
+}
+assert(
+  boundedRegistrarResources.join(",") === resourceDid,
+  "registrar maxItems should stop without reading another page",
+);
+
+const brokenRegistrarClient = new OanClient({
+  registrarEndpoint: "https://broken-registrar.example",
+  fetchImpl: fetchStub,
+});
+let registrarResponseError: Error | undefined;
+try {
+  await brokenRegistrarClient.getRegistrarResourcesPage();
+} catch (error) {
+  registrarResponseError = error instanceof Error ? error : new Error(String(error));
+}
+assert(
+  registrarResponseError?.message === "registrar_resource_list_invalid_response",
+  "registrar response consistency should be validated",
+);
+
+const stuckRegistrarClient = new OanClient({
+  registrarEndpoint: "https://stuck-registrar.example",
+  fetchImpl: fetchStub,
+});
+let registrarCursorError: Error | undefined;
+try {
+  for await (const _item of stuckRegistrarClient.iterateRegistrarResources({ pageSize: 1, maxPages: 3 })) {
+    // The stub repeats nextDid and must be rejected before another unbounded request.
+  }
+} catch (error) {
+  registrarCursorError = error instanceof Error ? error : new Error(String(error));
+}
+assert(
+  registrarCursorError?.message === "registrar_resource_list_cursor_not_advanced",
+  "registrar iterator should reject a stuck cursor",
+);
+
 const discoveryDomains = await client.getDiscoveryAuthorizedDomains();
 assert(discoveryDomains.authorizedDomains?.[0] === "openagenet.local", "discovery authorized domains mismatch");
 
@@ -428,6 +579,57 @@ for await (const resource of client.iterateCdnResources({ pageSize: 1 })) {
 assert(
   iteratedCdnResources.join(",") === `${resourceDid},${secondCdnResourceDid}`,
   "cdn paginated iterator mismatch",
+);
+
+let maxPageError: Error | undefined;
+try {
+  for await (const _resource of client.iterateCdnResources({ pageSize: 1, maxPages: 1 })) {
+    // Exhaust the first page so the iterator must decide whether a second page is allowed.
+  }
+} catch (error) {
+  maxPageError = error instanceof Error ? error : new Error(String(error));
+}
+assert(maxPageError?.message === "cdn_resource_index_max_pages_exceeded", "cdn iterator maxPages guard mismatch");
+
+const iteratedDiscoveryResources: string[] = [];
+for await (const item of client.iterateDiscoveryIndexResources({ pageSize: 1 })) {
+  iteratedDiscoveryResources.push(String(item.resourceDid));
+}
+assert(
+  iteratedDiscoveryResources.join(",") === `${firstDiscoveryResourceDid},${secondDiscoveryResourceDid}`,
+  "discovery paginated iterator should use the composite cursor",
+);
+
+const brokenDiscoveryClient = new OanClient({
+  discoveryEndpoint: "https://broken-discovery.example",
+  fetchImpl: fetchStub,
+});
+let discoveryCursorError: Error | undefined;
+try {
+  for await (const _item of brokenDiscoveryClient.iterateDiscoveryIndexResources({ pageSize: 1, maxPages: 2 })) {
+    // The stub keeps hasMore=true without advancing either part of the composite cursor.
+  }
+} catch (error) {
+  discoveryCursorError = error instanceof Error ? error : new Error(String(error));
+}
+assert(
+  discoveryCursorError?.message === "discovery_index_cursor_not_advanced",
+  "discovery iterator should reject a stuck composite cursor",
+);
+
+const brokenCdnClient = new OanClient({
+  cdnEndpoint: "https://broken-cdn.example",
+  fetchImpl: fetchStub,
+});
+let cdnResponseError: Error | undefined;
+try {
+  await brokenCdnClient.getCdnResourcesPage();
+} catch (error) {
+  cdnResponseError = error instanceof Error ? error : new Error(String(error));
+}
+assert(
+  cdnResponseError?.message === "cdn_resource_index_invalid_response",
+  "cdn response item shape should be validated",
 );
 
 const snapshot = await client.observeLifecycle(resourceDid);

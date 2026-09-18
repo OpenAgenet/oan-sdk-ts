@@ -7,6 +7,7 @@ import type {
   CapabilityTagNormalizeResponse,
   CapabilityTagSuggestionResponse,
   CdnStatusResponse,
+  DiscoveryIndexResourceListResponse,
   DiscoverySuggestionInput,
   DiscoverySuggestionResult,
   DiscoveryAuthorizedDomainsResponse,
@@ -18,6 +19,7 @@ import type {
   RegistrationDomainCatalogResponse,
   RegistrationSuggestionInput,
   RegistrationSuggestionResult,
+  RegistrarResourceListResponse,
   RegistrarStatusResponse,
   ResourceCdnIndexResponse,
   ResourceRegistrationResponse,
@@ -56,6 +58,8 @@ type OanClientResolvedEndpoints = Required<Pick<
   "registrarEndpoint" | "discoveryEndpoint" | "rootEndpoint" | "cdnEndpoint"
 >>;
 
+const DEFAULT_PAGE_SIZE = 100;
+
 export const DEFAULT_OAN_OFFICIAL_ENDPOINTS: OanOfficialEndpoints = {
   baseUrl: "https://api.openagenet.xyz",
   homepageEndpoint: "https://openagenet.xyz",
@@ -72,6 +76,13 @@ export interface ObserveLifecycleUntilVisibleOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
   onPoll?: (snapshot: OanLifecycleSnapshot) => void;
+}
+
+export interface BoundedPaginationOptions {
+  pageSize?: number;
+  maxItems?: number;
+  maxPages?: number;
+  timeoutMs?: number;
 }
 
 export class OanHttpError extends Error {
@@ -128,6 +139,53 @@ export class OanClient {
 
   async getRegistrarRootAuthorization(): Promise<RootAuthorizationInspection> {
     return this.getJson(this.requireEndpoint("registrarEndpoint", "/registrar/root-authorization"));
+  }
+
+  async getRegistrarResourcesPage(
+    options: { afterDid?: string | null; limit?: number } = {},
+  ): Promise<RegistrarResourceListResponse> {
+    const query = new URLSearchParams();
+    if (options.afterDid) {
+      query.set("afterDid", options.afterDid);
+    }
+    query.set("limit", String(Math.trunc(options.limit ?? DEFAULT_PAGE_SIZE)));
+    const queryString = query.toString();
+    const suffix = queryString ? `?${queryString}` : "";
+    return validateRegistrarResourceListResponse(
+      await this.getJson(this.requireEndpoint("registrarEndpoint", `/resources${suffix}`)),
+    );
+  }
+
+  async *iterateRegistrarResources(
+    options: BoundedPaginationOptions = {},
+  ): AsyncGenerator<Record<string, unknown>> {
+    if (options.maxItems !== undefined && options.maxItems <= 0) {
+      return;
+    }
+    const startedAt = Date.now();
+    let afterDid: string | null | undefined = null;
+    let yielded = 0;
+    for (let pageCount = 0; ; pageCount += 1) {
+      assertPaginationBounds("registrar_resource_list", options, pageCount, yielded, startedAt);
+      const page = await this.getRegistrarResourcesPage({ afterDid, limit: options.pageSize });
+      for (const item of page.items) {
+        if (options.maxItems !== undefined && yielded >= options.maxItems) {
+          return;
+        }
+        yielded += 1;
+        yield item;
+      }
+      if (options.maxItems !== undefined && yielded >= options.maxItems) {
+        return;
+      }
+      if (!page.hasMore) {
+        return;
+      }
+      if (!page.nextDid || page.nextDid === afterDid) {
+        throw new Error("registrar_resource_list_cursor_not_advanced");
+      }
+      afterDid = page.nextDid;
+    }
   }
 
   async suggestCapabilityTags(payload: { description?: string; query?: string }): Promise<CapabilityTagSuggestionResponse> {
@@ -214,21 +272,26 @@ export class OanClient {
   async getCdnResourcesPage(options: { afterCursor?: number; limit?: number } = {}): Promise<ResourceCdnIndexResponse> {
     const query = new URLSearchParams({
       afterCursor: String(Math.max(0, Math.trunc(options.afterCursor ?? 0))),
+      limit: String(Math.trunc(options.limit ?? DEFAULT_PAGE_SIZE)),
     });
-    if (options.limit !== undefined) {
-      query.set("limit", String(Math.trunc(options.limit)));
-    }
-    return this.getJson(this.requireEndpoint("cdnEndpoint", `/cdn/resources/index?${query.toString()}`));
+    return validateCdnIndexResponse(
+      await this.getJson(this.requireEndpoint("cdnEndpoint", `/cdn/resources/index?${query.toString()}`)),
+    );
   }
 
   async getCdnResources(): Promise<ResourceCdnIndexResponse> {
     return this.getCdnResourcesPage();
   }
 
-  async *iterateCdnResources(options: { pageSize?: number; maxItems?: number } = {}): AsyncGenerator<ResourcePackage> {
+  async *iterateCdnResources(options: BoundedPaginationOptions = {}): AsyncGenerator<ResourcePackage> {
+    if (options.maxItems !== undefined && options.maxItems <= 0) {
+      return;
+    }
+    const startedAt = Date.now();
     let afterCursor = 0;
     let yielded = 0;
-    for (;;) {
+    for (let pageCount = 0; ; pageCount += 1) {
+      assertPaginationBounds("cdn_resource_index", options, pageCount, yielded, startedAt);
       const page = await this.getCdnResourcesPage({
         afterCursor,
         limit: options.pageSize,
@@ -240,6 +303,9 @@ export class OanClient {
         yielded += 1;
         yield item.package;
       }
+      if (options.maxItems !== undefined && yielded >= options.maxItems) {
+        return;
+      }
       if (!page.hasMore) {
         return;
       }
@@ -247,6 +313,62 @@ export class OanClient {
         throw new Error("cdn_resource_index_cursor_not_advanced");
       }
       afterCursor = page.nextCursor;
+    }
+  }
+
+  async getDiscoveryIndexResourcesPage(
+    options: { afterCursor?: number; afterResourceDid?: string | null; limit?: number } = {},
+  ): Promise<DiscoveryIndexResourceListResponse> {
+    const query = new URLSearchParams({
+      afterCursor: String(Math.max(0, Math.trunc(options.afterCursor ?? 0))),
+      limit: String(Math.trunc(options.limit ?? DEFAULT_PAGE_SIZE)),
+    });
+    if (options.afterResourceDid) {
+      query.set("afterResourceDid", options.afterResourceDid);
+    }
+    return validateDiscoveryIndexResourceListResponse(
+      await this.getJson(this.requireEndpoint("discoveryEndpoint", `/discovery/index/resources?${query.toString()}`)),
+    );
+  }
+
+  async *iterateDiscoveryIndexResources(
+    options: BoundedPaginationOptions = {},
+  ): AsyncGenerator<Record<string, unknown>> {
+    if (options.maxItems !== undefined && options.maxItems <= 0) {
+      return;
+    }
+    const startedAt = Date.now();
+    let afterCursor = 0;
+    let afterResourceDid: string | null | undefined = null;
+    let yielded = 0;
+    for (let pageCount = 0; ; pageCount += 1) {
+      assertPaginationBounds("discovery_index_resources", options, pageCount, yielded, startedAt);
+      const page = await this.getDiscoveryIndexResourcesPage({
+        afterCursor,
+        afterResourceDid,
+        limit: options.pageSize,
+      });
+      for (const item of page.items) {
+        if (options.maxItems !== undefined && yielded >= options.maxItems) {
+          return;
+        }
+        yielded += 1;
+        yield item;
+      }
+      if (options.maxItems !== undefined && yielded >= options.maxItems) {
+        return;
+      }
+      if (!page.hasMore) {
+        return;
+      }
+      if (page.nextCursor < afterCursor) {
+        throw new Error("discovery_index_cursor_not_advanced");
+      }
+      if (page.nextCursor === afterCursor && page.nextResourceDid === afterResourceDid) {
+        throw new Error("discovery_index_cursor_not_advanced");
+      }
+      afterCursor = page.nextCursor;
+      afterResourceDid = page.nextResourceDid ?? null;
     }
   }
 
@@ -461,4 +583,117 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     };
     signal?.addEventListener("abort", onAbort, { once: true });
   });
+}
+
+function assertPaginationBounds(
+  name: string,
+  options: BoundedPaginationOptions,
+  pageCount: number,
+  yielded: number,
+  startedAt: number,
+): void {
+  if (options.maxPages !== undefined && pageCount >= options.maxPages) {
+    throw new Error(`${name}_max_pages_exceeded`);
+  }
+  if (options.timeoutMs !== undefined && Date.now() - startedAt >= options.timeoutMs) {
+    throw new Error(`${name}_timeout`);
+  }
+}
+
+function validateRegistrarResourceListResponse(value: unknown): RegistrarResourceListResponse {
+  const page = asRecord(value, "registrar_resource_list_invalid_response");
+  if (
+    !Array.isArray(page.items) ||
+    typeof page.count !== "number" ||
+    page.count < 0 ||
+    page.count !== page.items.length ||
+    typeof page.hasMore !== "boolean" ||
+    page.items.some((item) => !item || typeof item !== "object" || Array.isArray(item))
+  ) {
+    throw new Error("registrar_resource_list_invalid_response");
+  }
+  if (page.afterDid !== null && page.afterDid !== undefined && typeof page.afterDid !== "string") {
+    throw new Error("registrar_resource_list_invalid_response");
+  }
+  if (page.nextDid !== null && page.nextDid !== undefined && typeof page.nextDid !== "string") {
+    throw new Error("registrar_resource_list_invalid_response");
+  }
+  return page as unknown as RegistrarResourceListResponse;
+}
+
+function validateCdnIndexResponse(value: unknown): ResourceCdnIndexResponse {
+  const page = asRecord(value, "cdn_resource_index_invalid_response");
+  if (
+    !Array.isArray(page.items) ||
+    typeof page.count !== "number" ||
+    page.count < 0 ||
+    page.count !== page.items.length ||
+    typeof page.afterCursor !== "number" ||
+    page.afterCursor < 0 ||
+    typeof page.nextCursor !== "number" ||
+    page.nextCursor < 0 ||
+    typeof page.hasMore !== "boolean"
+  ) {
+    throw new Error("cdn_resource_index_invalid_response");
+  }
+  if (
+    page.items.some(
+      (item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) {
+          return true;
+        }
+        const record = item as Record<string, unknown>;
+        return typeof record.cursor !== "number" || record.cursor < 0 || !("package" in record);
+      },
+    )
+  ) {
+    throw new Error("cdn_resource_index_invalid_response");
+  }
+  return page as unknown as ResourceCdnIndexResponse;
+}
+
+function validateDiscoveryIndexResourceListResponse(value: unknown): DiscoveryIndexResourceListResponse {
+  const page = asRecord(value, "discovery_index_resources_invalid_response");
+  if (
+    !Array.isArray(page.items) ||
+    typeof page.count !== "number" ||
+    page.count < 0 ||
+    page.count !== page.items.length ||
+    typeof page.afterCursor !== "number" ||
+    page.afterCursor < 0 ||
+    typeof page.nextCursor !== "number" ||
+    page.nextCursor < 0 ||
+    typeof page.hasMore !== "boolean"
+  ) {
+    throw new Error("discovery_index_resources_invalid_response");
+  }
+  if (
+    page.items.some(
+      (item) => !item || typeof item !== "object" || Array.isArray(item),
+    )
+  ) {
+    throw new Error("discovery_index_resources_invalid_response");
+  }
+  if (
+    page.afterResourceDid !== null &&
+    page.afterResourceDid !== undefined &&
+    typeof page.afterResourceDid !== "string"
+  ) {
+    throw new Error("discovery_index_resources_invalid_response");
+  }
+  if (
+    page.nextResourceDid !== null &&
+    page.nextResourceDid !== undefined &&
+    typeof page.nextResourceDid !== "string"
+  ) {
+    throw new Error("discovery_index_resources_invalid_response");
+  }
+  return page as unknown as DiscoveryIndexResourceListResponse;
+}
+
+function asRecord(value: unknown, errorCode: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(errorCode);
+  }
+  return value as Record<string, unknown>;
 }

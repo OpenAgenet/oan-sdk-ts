@@ -369,6 +369,14 @@ export interface RegistrarStatusResponse {
   [key: string]: unknown;
 }
 
+export interface RegistrarResourceListResponse {
+  items: Array<Record<string, unknown>>;
+  count: number;
+  afterDid: string | null;
+  nextDid: string | null;
+  hasMore: boolean;
+}
+
 export interface RootAuthorizationInspection {
   registrarDid?: string;
   discoveryDid?: string;
@@ -412,6 +420,16 @@ export interface ResourceCdnIndexResponse {
   count: number;
   afterCursor: number;
   nextCursor: number;
+  hasMore: boolean;
+}
+
+export interface DiscoveryIndexResourceListResponse {
+  items: Array<Record<string, unknown>>;
+  count: number;
+  afterCursor: number;
+  afterResourceDid?: string | null;
+  nextCursor: number;
+  nextResourceDid?: string | null;
   hasMore: boolean;
 }
 

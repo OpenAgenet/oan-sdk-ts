@@ -566,6 +566,19 @@ assert(
   "registrar iterator should reject a stuck cursor",
 );
 
+let registrarTimeoutError: Error | undefined;
+try {
+  for await (const _item of client.iterateRegistrarResources({ timeoutMs: 0 })) {
+    // The timeout guard should stop before any page can be read.
+  }
+} catch (error) {
+  registrarTimeoutError = error instanceof Error ? error : new Error(String(error));
+}
+assert(
+  registrarTimeoutError?.message === "registrar_resource_list_timeout",
+  "registrar iterator should enforce timeoutMs",
+);
+
 const discoveryDomains = await client.getDiscoveryAuthorizedDomains();
 assert(discoveryDomains.authorizedDomains?.[0] === "openagenet.local", "discovery authorized domains mismatch");
 

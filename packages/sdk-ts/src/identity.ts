@@ -130,6 +130,7 @@ export async function createOanIdentityRecord(
   if (Array.isArray(didDocument.verificationMethod) && didDocument.verificationMethod[0]) {
     didDocument.verificationMethod[0] = {
       ...didDocument.verificationMethod[0],
+      cryptoSuite: "Ed25519Sha256",
       publicKeyJwk: keyPair.publicKeyJwk,
       publicKeyMultibase: undefined,
     };
@@ -268,6 +269,7 @@ export function createRegistrationSubmissionFromIdentity(
   if (Array.isArray(draft.verificationMethod) && draft.verificationMethod[0]) {
     draft.verificationMethod[0] = {
       ...draft.verificationMethod[0],
+      cryptoSuite: "Ed25519Sha256",
       publicKeyJwk: record.publicKeyJwk,
       publicKeyMultibase: undefined,
     };
@@ -355,6 +357,7 @@ function sanitizeControllerDidDocument(record: OanIdentityRecord): DidDocument {
       }),
       id: record.verificationMethodId,
       controller: record.did,
+      cryptoSuite: "Ed25519Sha256",
       publicKeyJwk: record.publicKeyJwk,
       publicKeyMultibase: undefined,
     },

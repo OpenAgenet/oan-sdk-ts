@@ -19,6 +19,7 @@ import type {
   RegistrationSuggestionInput,
   RegistrationSuggestionResult,
   RegistrarStatusResponse,
+  ResourceCdnIndexResponse,
   ResourceRegistrationResponse,
   ResourceRegistrationSubmission,
   ResourceDiscoveryQuery,
@@ -210,8 +211,43 @@ export class OanClient {
     );
   }
 
-  async getCdnResources(): Promise<{ items?: ResourcePackage[]; resources?: Record<string, ResourcePackage> }> {
-    return this.getJson(this.requireEndpoint("cdnEndpoint", "/cdn/resources/index"));
+  async getCdnResourcesPage(options: { afterCursor?: number; limit?: number } = {}): Promise<ResourceCdnIndexResponse> {
+    const query = new URLSearchParams({
+      afterCursor: String(Math.max(0, Math.trunc(options.afterCursor ?? 0))),
+    });
+    if (options.limit !== undefined) {
+      query.set("limit", String(Math.trunc(options.limit)));
+    }
+    return this.getJson(this.requireEndpoint("cdnEndpoint", `/cdn/resources/index?${query.toString()}`));
+  }
+
+  async getCdnResources(): Promise<ResourceCdnIndexResponse> {
+    return this.getCdnResourcesPage();
+  }
+
+  async *iterateCdnResources(options: { pageSize?: number; maxItems?: number } = {}): AsyncGenerator<ResourcePackage> {
+    let afterCursor = 0;
+    let yielded = 0;
+    for (;;) {
+      const page = await this.getCdnResourcesPage({
+        afterCursor,
+        limit: options.pageSize,
+      });
+      for (const item of page.items ?? []) {
+        if (options.maxItems !== undefined && yielded >= options.maxItems) {
+          return;
+        }
+        yielded += 1;
+        yield item.package;
+      }
+      if (!page.hasMore) {
+        return;
+      }
+      if (page.nextCursor <= afterCursor) {
+        throw new Error("cdn_resource_index_cursor_not_advanced");
+      }
+      afterCursor = page.nextCursor;
+    }
   }
 
   async getCdnResourcePackage(resourceDid: string): Promise<ResourcePackage | null> {

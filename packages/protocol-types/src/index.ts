@@ -402,6 +402,19 @@ export interface CdnStatusResponse {
   [key: string]: unknown;
 }
 
+export interface ResourceCdnIndexItem {
+  cursor: number;
+  package: ResourcePackage;
+}
+
+export interface ResourceCdnIndexResponse {
+  items: ResourceCdnIndexItem[];
+  count: number;
+  afterCursor: number;
+  nextCursor: number;
+  hasMore: boolean;
+}
+
 export interface DiscoveryStatusResponse {
   status?: string;
   did?: string;

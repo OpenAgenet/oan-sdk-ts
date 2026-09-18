@@ -5,7 +5,7 @@
 
 import { DEFAULT_OAN_OFFICIAL_ENDPOINTS, OanClient } from "../packages/client-ts/src/index.js";
 import { GovernanceClient, subjectTypeCodeForRole } from "../packages/governance-ts/src/index.js";
-import type { ResourceRegistrationSubmission } from "../packages/protocol-types/src/index.js";
+import type { ResourcePackage, ResourceRegistrationSubmission } from "../packages/protocol-types/src/index.js";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -34,6 +34,7 @@ function createFetchStub(
 
 const resourceDid = "did:oan:SKDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz";
 const versionOnlyResourceDid = "did:oan:SKDM:9KvVersionOnlyRoot2WfHa4Cd5Ej8LgNz";
+const secondCdnResourceDid = "did:oan:SKDM:8MvSecondCdnPage2WfHa4Cd5Ej8LgNz";
 const submission: ResourceRegistrationSubmission = {
   resourceDid,
   resourceType: "skill",
@@ -49,6 +50,33 @@ const submission: ResourceRegistrationSubmission = {
   packageHash: "sha256:package",
   hashAlgorithm: "sha256",
 };
+
+function createResourcePackage(did: string): ResourcePackage {
+  return {
+    packageVersion: "1.0.0",
+    resourceDid: did,
+    resourceType: "skill",
+    didDocument: { id: did },
+    didDocumentHash: "sha256:did",
+    metadataHash: "sha256:metadata",
+    packageHash: "sha256:package",
+    hashAlgorithm: "sha256",
+    metadata: {
+      resourceDid: did,
+      resourceType: "skill",
+      subjectType: "skill",
+      name: "Skill",
+      lifecycleState: "active",
+      packageVersion: "1.0.0",
+      packageHash: "sha256:package",
+      metadataHash: "sha256:metadata",
+      hashAlgorithm: "sha256",
+      updatedAt: "2026-06-23T00:00:00Z",
+    },
+    rootProof: { rootDid: "did:oan:AGRT:test" },
+    createdAt: "2026-06-23T00:00:00Z",
+  };
+}
 
 const fetchStub = createFetchStub({
   [`GET ${DEFAULT_OAN_OFFICIAL_ENDPOINTS.baseUrl}/registrar/status`]: {
@@ -191,31 +219,35 @@ const fetchStub = createFetchStub({
       resourceCount: 1,
     },
   },
-  [`GET https://cdn.example/cdn/resources/${encodeURIComponent(resourceDid)}`]: {
+  "GET https://cdn.example/cdn/resources/index?afterCursor=0": {
     body: {
-      resourceDid,
-      resourceType: "skill",
-      packageVersion: "1.0.0",
-      didDocument: { id: resourceDid },
-      didDocumentHash: "sha256:did",
-      metadataHash: "sha256:metadata",
-      packageHash: "sha256:package",
-      hashAlgorithm: "sha256",
-      metadata: {
-        resourceDid,
-        resourceType: "skill",
-        subjectType: "skill",
-        name: "Skill",
-        lifecycleState: "active",
-        packageVersion: "1.0.0",
-        packageHash: "sha256:package",
-        metadataHash: "sha256:metadata",
-        hashAlgorithm: "sha256",
-        updatedAt: "2026-06-23T00:00:00Z",
-      },
-      rootProof: { rootDid: "did:oan:AGRT:test" },
-      createdAt: "2026-06-23T00:00:00Z",
+      items: [{ cursor: 1, package: createResourcePackage(resourceDid) }],
+      count: 1,
+      afterCursor: 0,
+      nextCursor: 1,
+      hasMore: true,
     },
+  },
+  "GET https://cdn.example/cdn/resources/index?afterCursor=0&limit=1": {
+    body: {
+      items: [{ cursor: 1, package: createResourcePackage(resourceDid) }],
+      count: 1,
+      afterCursor: 0,
+      nextCursor: 1,
+      hasMore: true,
+    },
+  },
+  "GET https://cdn.example/cdn/resources/index?afterCursor=1&limit=1": {
+    body: {
+      items: [{ cursor: 2, package: createResourcePackage(secondCdnResourceDid) }],
+      count: 1,
+      afterCursor: 1,
+      nextCursor: 2,
+      hasMore: false,
+    },
+  },
+  [`GET https://cdn.example/cdn/resources/${encodeURIComponent(resourceDid)}`]: {
+    body: createResourcePackage(resourceDid),
   },
   "GET https://discovery.example/discovery/status": {
     body: {
@@ -385,6 +417,18 @@ assert(registrarRootAuthorization.rootReachable, "registrar root authorization r
 
 const discoveryDomains = await client.getDiscoveryAuthorizedDomains();
 assert(discoveryDomains.authorizedDomains?.[0] === "openagenet.local", "discovery authorized domains mismatch");
+
+const cdnFirstPage = await client.getCdnResources();
+assert(cdnFirstPage.items[0]?.package.resourceDid === resourceDid, "cdn default page mismatch");
+
+const iteratedCdnResources: string[] = [];
+for await (const resource of client.iterateCdnResources({ pageSize: 1 })) {
+  iteratedCdnResources.push(resource.resourceDid);
+}
+assert(
+  iteratedCdnResources.join(",") === `${resourceDid},${secondCdnResourceDid}`,
+  "cdn paginated iterator mismatch",
+);
 
 const snapshot = await client.observeLifecycle(resourceDid);
 assert(snapshot.registrarAccepted, "registrar should observe record");

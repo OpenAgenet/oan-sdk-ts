@@ -377,7 +377,7 @@ assert(
 );
 assert(identitySubmission.didDocument.verificationMethod?.[0]?.publicKeyJwk, "identity-backed draft should carry publicKeyJwk");
 assert(
-  identitySubmission.didDocument.verificationMethod?.[0]?.cryptoSuite === "Ed25519Sha256",
+  identitySubmission.didDocument.verificationMethod?.[0]?.cryptoSuite === "ed25519-sha256",
   "identity-backed draft should carry explicit cryptoSuite",
 );
 identitySubmission.didDocumentHash = "sha256:sdk-test-did-document";
@@ -400,7 +400,7 @@ assert(
   "controller proof submission should not contain privateKeyJwk",
 );
 assert(
-  controllerProof.controllerDidDocument.verificationMethod?.[0]?.cryptoSuite === "Ed25519Sha256",
+  controllerProof.controllerDidDocument.verificationMethod?.[0]?.cryptoSuite === "ed25519-sha256",
   "controller DID document should declare the proof crypto suite",
 );
 const verifyKey = await globalThis.crypto.subtle.importKey(
@@ -457,7 +457,7 @@ function testCanonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(testCanonicalJson).join(",")}]`;
   const entries = Object.entries(value as Record<string, unknown>)
     .filter(([, entryValue]) => entryValue !== undefined)
-    .sort(([left], [right]) => left.localeCompare(right));
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
   return `{${entries.map(([key, entryValue]) => `${JSON.stringify(key)}:${testCanonicalJson(entryValue)}`).join(",")}}`;
 }
 

@@ -130,7 +130,7 @@ export async function createOanIdentityRecord(
   if (Array.isArray(didDocument.verificationMethod) && didDocument.verificationMethod[0]) {
     didDocument.verificationMethod[0] = {
       ...didDocument.verificationMethod[0],
-      cryptoSuite: "Ed25519Sha256",
+      cryptoSuite: "ed25519-sha256",
       publicKeyJwk: keyPair.publicKeyJwk,
       publicKeyMultibase: undefined,
     };
@@ -269,7 +269,7 @@ export function createRegistrationSubmissionFromIdentity(
   if (Array.isArray(draft.verificationMethod) && draft.verificationMethod[0]) {
     draft.verificationMethod[0] = {
       ...draft.verificationMethod[0],
-      cryptoSuite: "Ed25519Sha256",
+      cryptoSuite: "ed25519-sha256",
       publicKeyJwk: record.publicKeyJwk,
       publicKeyMultibase: undefined,
     };
@@ -357,7 +357,7 @@ function sanitizeControllerDidDocument(record: OanIdentityRecord): DidDocument {
       }),
       id: record.verificationMethodId,
       controller: record.did,
-      cryptoSuite: "Ed25519Sha256",
+      cryptoSuite: "ed25519-sha256",
       publicKeyJwk: record.publicKeyJwk,
       publicKeyMultibase: undefined,
     },
@@ -397,7 +397,7 @@ async function signDataIntegrityProof(
     created: new Date().toISOString(),
     proofPurpose,
     proofValue: base64Url(new Uint8Array(signature)),
-    cryptoSuite: "Ed25519Sha256",
+    cryptoSuite: "ed25519-sha256",
     hashAlgorithm: "SHA-256",
     verificationMethod: record.verificationMethodId,
   };
@@ -427,7 +427,7 @@ function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   const entries = Object.entries(value as Record<string, unknown>)
     .filter(([, entryValue]) => entryValue !== undefined)
-    .sort(([left], [right]) => left.localeCompare(right));
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
   return `{${entries.map(([key, entryValue]) => `${JSON.stringify(key)}:${canonicalJson(entryValue)}`).join(",")}}`;
 }
 

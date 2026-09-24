@@ -32,6 +32,11 @@ import {
   verifyArtifactReferenceMaterial,
   verifyCandidateMatchesPackage,
   hasDidOanSemanticConflict,
+  hashDidDocumentWithProof,
+  didDocumentSignatureInput,
+  finalizeRegistrationSubmissionWithProof,
+  getRegistrationExternalIdentifierIds,
+  signDidDocumentProof,
   verifyResourcePackageShape,
 } from "../packages/sdk-ts/src/index.js";
 import type { ResourceDiscoveryCandidate, ResourcePackage } from "../packages/protocol-types/src/index.js";
@@ -59,7 +64,7 @@ function expectVerificationCode(fn: () => void, code: string): void {
 }
 
 function samplePackage(): ResourcePackage {
-  const resourceDid = "did:oan:AGBM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz";
+  const resourceDid = "did:oan:K7mQ9:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz";
   return {
     packageVersion: "1.0.0",
     resourceDid,
@@ -115,7 +120,7 @@ function samplePackage(): ResourcePackage {
       updatedAt: "2026-06-04T00:00:00Z",
     },
     rootProof: {
-      rootDid: "did:oan:INRT:8YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+      rootDid: "did:oan:P9aBc:8YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
       packageClaims: {
         resourceDid,
         resourceType: "agent_service",
@@ -134,8 +139,7 @@ function samplePackage(): ResourcePackage {
 
 const pkg = samplePackage();
 expectNoThrow(() => assertDidOan(pkg.resourceDid));
-assert(normalizeDidOan("did:oan:agbm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz") === pkg.resourceDid, "did normalization mismatch");
-assert(inferResourceTypeFromDidOan(pkg.resourceDid) === "agent_service", "inferred resource type mismatch");
+assert(normalizeDidOan(pkg.resourceDid) === pkg.resourceDid, "did normalization mismatch");
 expectNoThrow(() => verifyResourcePackageShape(pkg));
 expectNoThrow(() => assertUsableLifecycle(pkg));
 
@@ -169,19 +173,7 @@ expectVerificationCode(
   "root_claim_mismatch",
 );
 
-const wrongSubject = samplePackage();
-wrongSubject.resourceType = "skill";
-wrongSubject.metadata.resourceType = "skill";
-wrongSubject.metadata.subjectType = "skill";
-wrongSubject.rootProof.packageClaims!.resourceType = "skill";
-expectVerificationCode(
-  () => verifyResourcePackageShape(wrongSubject),
-  "did_subject_resource_type_mismatch",
-);
-assert(
-  hasDidOanSemanticConflict(pkg.resourceDid, { subjectType: "skill", resourceType: "skill" }),
-  "semantic conflict should be detected",
-);
+assert(!hasDidOanSemanticConflict(pkg.resourceDid, { subjectType: "skill", resourceType: "skill" }), "DID must not encode resource type");
 
 const packageInfo = getArtifactReferences(pkg);
 assert(packageInfo.manifestUrl === "https://example.org/agent/manifest.json", "manifest url mismatch");
@@ -192,7 +184,7 @@ expectVerificationCode(
 );
 
 const skillDraft = createSkillDraft({
-  resourceDid: "did:oan:SKDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  resourceDid: "did:oan:k7mQ9:CYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
   name: "Contract Review Skill",
   description: "Review contracts and flag legal risks.",
   capabilityTags: ["legal.contract-review"],
@@ -209,7 +201,7 @@ assert(
 );
 
 const portableSkill = createSkillDraft({
-  resourceDid: "did:oan:SKDM:8YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  resourceDid: "did:oan:K7mQ9:8YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
   name: "Portable Skill",
   packageHash: "sha256:portable-skill",
 });
@@ -221,43 +213,44 @@ const portableSkillReport = validateDidDocumentDraft(portableSkill, {
 assert(portableSkillReport.ok, "portable skill draft should validate cleanly");
 
 const mcpDraft = createMcpServerDraft({
-  resourceDid: "did:oan:MCDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  resourceDid: "did:oan:K7mQ9:9YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
   name: "Legal MCP Server",
   serviceEndpoint: "https://example.org/mcp",
 });
 assert(mcpDraft.service?.[0]?.type === "OANMCPServer", "mcp draft service type mismatch");
 
 const apiDraft = createToolApiDraft({
-  resourceDid: "did:oan:TLDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  resourceDid: "did:oan:K7mQ9:AYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
   name: "Risk API",
   serviceEndpoint: "https://example.org/openapi.json",
 });
 assert(apiDraft.service?.[0]?.type === "OANToolAPI", "tool api draft service type mismatch");
 
 const agentDraft = createAgentServiceDraft({
-  resourceDid: "did:oan:AGDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  resourceDid: "did:oan:K7mQ9:BYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
   name: "Risk Agent",
   serviceEndpoint: "https://example.org/agent/invoke",
 });
 assert(agentDraft.oanMetadata?.resourceType === "agent_service", "agent draft resource type mismatch");
+assert(agentDraft.controller === agentDraft.id, "agent draft controller should default to subject DID");
 
 const normalizedSubmission = normalizeRegistrationSubmissionForOan({
-  resourceDid: "did:oan:agdm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  resourceDid: "did:oan:k7mQ9:CYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
   resourceType: "agent_service",
   didDocument: {
-    id: "did:oan:agdm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
-    controller: "did:oan:agdm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+    id: "did:oan:k7mQ9:CYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+    controller: "did:oan:k7mQ9:CYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
     verificationMethod: [
       {
-        id: "did:oan:agdm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz#key-1",
+        id: "did:oan:k7mQ9:CYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz#key-1",
         type: "Ed25519VerificationKey2020",
-        controller: "did:oan:agdm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+        controller: "did:oan:k7mQ9:CYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
       },
     ],
     oanMetadata: {
       subjectType: "agent_service",
       resourceType: "agent_service",
-      controllerDid: "did:oan:agdm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+      controllerDid: "did:oan:k7mQ9:CYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
     },
   },
   packageVersion: "1.0.0",
@@ -266,20 +259,20 @@ const normalizedSubmission = normalizeRegistrationSubmissionForOan({
   hashAlgorithm: "sha256",
 });
 assert(
-  normalizedSubmission.resourceDid === "did:oan:AGDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  normalizedSubmission.resourceDid === "did:oan:k7mQ9:CYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
   "submission did normalization mismatch",
 );
 assert(
   normalizedSubmission.didDocument.verificationMethod?.[0]?.controller ===
-    "did:oan:AGDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+    "did:oan:k7mQ9:CYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
   "verification method controller normalization mismatch",
 );
 
 const normalizedDocument = normalizeDidDocumentForOan({
-  id: "did:oan:skdm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  id: "did:oan:k7mQ9:CYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
   service: [
     {
-      id: "did:oan:skdm:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz#manifest",
+      id: "did:oan:k7mQ9:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz#manifest",
       type: "OANSkillManifest",
       serviceEndpoint: "https://example.org/skill.json",
     },
@@ -289,24 +282,22 @@ const normalizedDocument = normalizeDidDocumentForOan({
     resourceType: "skill",
   },
 });
-assert(normalizedDocument.id === "did:oan:SKDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz", "document did normalization mismatch");
+assert(normalizedDocument.id === "did:oan:k7mQ9:CYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz", "document did normalization mismatch");
 assert(
-  normalizedDocument.service?.[0]?.id === "did:oan:SKDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz#manifest",
+  normalizedDocument.service?.[0]?.id === "did:oan:k7mQ9:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz#manifest",
   "service id normalization mismatch",
 );
 
-expectVerificationCode(
-  () =>
-    createSkillDraft({
-      resourceDid: "did:oan:AGDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
-      name: "Wrong Skill",
-    }),
-  "did_subject_resource_type_mismatch",
+expectNoThrow(() =>
+  createSkillDraft({
+    resourceDid: "did:oan:k7mQ9:CYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+    name: "Skill with registrar-routed DID",
+  }),
 );
 
 const invalidReport = validateDidDocumentDraft({
-  id: "did:oan:AGDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
-  service: [{ id: "did:oan:AGDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz#svc", type: "Svc", serviceEndpoint: "https://x" }],
+  id: "did:oan:k7mQ9:CYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  service: [{ id: "did:oan:k7mQ9:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz#svc", type: "Svc", serviceEndpoint: "https://x" }],
   oanMetadata: {
     subjectType: "agent_service",
     resourceType: "agent_service",
@@ -314,7 +305,7 @@ const invalidReport = validateDidDocumentDraft({
     packageInfo: { manifestUrl: "https://example.org/agent.json" },
   },
 }, {
-  resourceDid: "did:oan:AGDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  resourceDid: "did:oan:k7mQ9:CYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
   resourceType: "agent_service",
 });
 assert(!invalidReport.ok, "invalid draft report should fail");
@@ -365,6 +356,17 @@ const agentIdentity = await createAgentIdentity("SDK Test Skill", "skill", subje
   authorizedDomains: ["legal"],
   manifestUrl: "https://example.org/skills/sdk-test.json",
 });
+const signedDocument = await signDidDocumentProof(subjectIdentity.didDocument, subjectIdentity);
+assert(signedDocument.proof?.hashAlgorithm === "sha256", "DID proof hash algorithm mismatch");
+assert(new TextDecoder().decode(didDocumentSignatureInput(signedDocument)) === new TextDecoder().decode(didDocumentSignatureInput({ ...signedDocument, proof: undefined })), "DID signature input mismatch");
+const documentHash = await hashDidDocumentWithProof(signedDocument);
+assert(/^[0-9a-f]{64}$/.test(documentHash), "DID document hash format mismatch");
+const externalIdDocument = createSkillDraft({
+  resourceDid: "did:oan:K7mQ9:DYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  name: "External ID Skill",
+  externalIdentifiers: [{ id: "urn:example:skill", resolutionServiceEndpoint: "https://resolver.example/skill" }],
+});
+assert(getRegistrationExternalIdentifierIds(externalIdDocument)[0] === "urn:example:skill", "external identifier id missing");
 const identitySubmission = createRegistrationSubmissionFromIdentity(agentIdentity, {
   manifestUrl: "https://example.org/skills/sdk-test.json",
   packageHash: "sha256:sdk-test-package",
@@ -383,7 +385,7 @@ assert(
 identitySubmission.didDocumentHash = "sha256:sdk-test-did-document";
 await attachControllerAuthorizationProof(identitySubmission, {
   controllerIdentity: subjectIdentity,
-  registrarDid: "did:oan:INRG:sdk-test",
+  registrarDid: "did:oan:P9aBc:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
 });
 const controllerProof = identitySubmission.controllerAuthorizationProof;
 assert(controllerProof, "controllerAuthorizationProof should be attached");
@@ -429,13 +431,13 @@ mismatchedSubmission.didDocument.oanMetadata = {
     subjectType: "skill",
     resourceType: "skill",
   }),
-  controllerDid: "did:oan:DVDM:11111111111111111111111111111111",
+  controllerDid: "did:oan:QwErT:11111111111111111111111111111111",
 };
 let mismatchRejected = false;
 try {
   await attachControllerAuthorizationProof(mismatchedSubmission, {
     controllerIdentity: subjectIdentity,
-    registrarDid: "did:oan:INRG:sdk-test",
+    registrarDid: "did:oan:P9aBc:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
   });
 } catch (error) {
   mismatchRejected = error instanceof Error && error.message === "controller_identity_mismatch";

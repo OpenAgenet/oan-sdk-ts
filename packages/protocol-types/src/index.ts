@@ -3,7 +3,14 @@
 // Initial author: JINLIANG XU
 // Email: jlxufly@gmail.com
 
+export type SubjectType =
+  | "agent_instance" | "agent_product" | "agent_service" | "skill" | "mcp_server" | "tool_api"
+  | "infrastructure_node" | "organization" | "developer" | "root_node" | "registrar_node"
+  | "discovery_node" | "cdn_node" | "vc_issuer_node" | "trust_indexer_node" | "unspecified";
+
 export type ResourceType =
+  | "agent_instance"
+  | "agent_product"
   | "agent_service"
   | "skill"
   | "mcp_server"
@@ -17,11 +24,13 @@ export type VersionMode = "latest" | "exact" | "constraint" | "any-retained";
 export interface DidDocument {
   "@context"?: string | string[];
   id: string;
+  controller?: string | string[];
   verificationMethod?: VerificationMethod[];
   authentication?: string[];
   assertionMethod?: string[];
   capabilityInvocation?: string[];
   service?: ServiceEndpoint[];
+  proof?: DataIntegrityProof;
   oanMetadata?: OanMetadata;
   [key: string]: unknown;
 }
@@ -49,9 +58,9 @@ export interface ServiceEndpoint {
 }
 
 export interface OanMetadata {
-  subjectType: ResourceType;
+  subjectType: SubjectType;
   resourceType: ResourceType;
-  nodeRole?: string;
+  externalIdentifiers?: ExternalIdentifier[];
   identityType?: string;
   controllerDid?: string;
   publisherDid?: string;
@@ -124,6 +133,11 @@ export interface DataIntegrityProof {
   cryptoSuite?: string;
   hashAlgorithm?: string;
   [key: string]: unknown;
+}
+
+export interface ExternalIdentifier {
+  id: string;
+  resolutionServiceEndpoint?: string;
 }
 
 export interface DidControlChallenge {

@@ -4,6 +4,7 @@
 // Email: jlxufly@gmail.com
 
 import type {
+  DataIntegrityProof,
   DidDocument,
   PackageInfo,
   ProtocolBinding,
@@ -17,7 +18,6 @@ import type {
 } from "../../protocol-types/src/index.js";
 import {
   hasDidOanSemanticConflict,
-  inferResourceTypeFromDidOan,
   normalizeDidOan,
   OAN_DID_CONTEXT,
 } from "./did-oan.js";
@@ -103,6 +103,7 @@ export interface ResourceDraftOptions {
   publicKeyMultibase?: string;
   protocolBindings?: ProtocolBinding[];
   resourceDescription?: Partial<ResourceDescription>;
+  externalIdentifiers?: import("../../protocol-types/src/index.js").ExternalIdentifier[];
 }
 
 export function assertDidOan(value: string): void {
@@ -111,9 +112,6 @@ export function assertDidOan(value: string): void {
 
 export function assertDidSubjectMatchesResourceType(resourceDid: string, resourceType: ResourceType): void {
   assertDidOan(resourceDid);
-  if (inferResourceTypeFromDidOan(resourceDid) !== resourceType) {
-    throw new OanVerificationError("did_subject_resource_type_mismatch");
-  }
 }
 
 export function assertSupportedInitialResourceType(resourceType: ResourceType): void {
@@ -123,7 +121,7 @@ export function assertSupportedInitialResourceType(resourceType: ResourceType): 
 }
 
 export function createResourceDidDocumentDraft(options: ResourceDraftOptions): DidDocument {
-  assertDidSubjectMatchesResourceType(options.resourceDid, options.resourceType);
+  assertDidOan(options.resourceDid);
   const normalizedDid = normalizeDidOan(options.resourceDid);
   const version = options.version ?? "1.0.0";
   const hashAlgorithm = options.hashAlgorithm ?? "sha256";
@@ -152,12 +150,12 @@ export function createResourceDidDocumentDraft(options: ResourceDraftOptions): D
   return {
     "@context": [...OAN_DID_CONTEXT],
     id: normalizedDid,
-    controller: options.controllerDid ?? options.publisherDid,
+    controller: options.controllerDid ?? options.publisherDid ?? normalizedDid,
     verificationMethod: [
       {
         id: keyId,
         type: options.verificationMethodType ?? "Ed25519VerificationKey2020",
-        controller: normalizedDid,
+        controller: options.controllerDid ?? options.publisherDid ?? normalizedDid,
         publicKeyMultibase: options.publicKeyMultibase ?? "zReplaceWithPublicKey",
       },
     ],
@@ -165,11 +163,13 @@ export function createResourceDidDocumentDraft(options: ResourceDraftOptions): D
     assertionMethod: [keyId],
     capabilityInvocation: [keyId],
     service: service ? [service] : [],
+    proof: undefined,
     oanMetadata: {
       subjectType: options.resourceType,
       resourceType: options.resourceType,
+      externalIdentifiers: options.externalIdentifiers,
       publisherDid: options.publisherDid,
-      controllerDid: options.controllerDid,
+      controllerDid: options.controllerDid ?? options.publisherDid ?? normalizedDid,
       resourceDescription: {
         name: options.name,
         description: options.description,
@@ -614,6 +614,35 @@ function extractProtocolsFromBindings(bindings: unknown): string[] {
         : undefined,
     )
     .filter((value): value is string => typeof value === "string" && value.length > 0);
+}
+
+export function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, entryValue]) => entryValue !== undefined)
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+  return `{${entries.map(([key, entryValue]) => `${JSON.stringify(key)}:${canonicalJson(entryValue)}`).join(",")}}`;
+}
+
+export function didDocumentSignatureInput(document: DidDocument): Uint8Array {
+  const unsigned = { ...document, proof: undefined };
+  return new TextEncoder().encode(canonicalJson(unsigned));
+}
+
+export async function hashDidDocumentWithProof(document: DidDocument): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonicalJson(document)));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export function getRegistrationExternalIdentifierIds(document: DidDocument): string[] {
+  return (document.oanMetadata?.externalIdentifiers ?? [])
+    .map((item) => item.id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+}
+
+export function buildRegistrationExternalIdentifiers(document: DidDocument): Array<{ id: string }> {
+  return getRegistrationExternalIdentifierIds(document).map((id) => ({ id }));
 }
 
 function sameStringList(left: string[], right: string[]): boolean {

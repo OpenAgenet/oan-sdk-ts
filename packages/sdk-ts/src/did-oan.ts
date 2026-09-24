@@ -3,24 +3,14 @@
 // Initial author: JINLIANG XU
 // Email: jlxufly@gmail.com
 
-import type { DidDocument, OanMetadata, ResourceRegistrationSubmission, ResourceType } from "../../protocol-types/src/index.js";
+import type { DidDocument, OanMetadata, ResourceRegistrationSubmission } from "../../protocol-types/src/index.js";
 import { OanVerificationError } from "./index.js";
 
 export const OAN_METHOD = "oan";
 export const OAN_DID_CONTEXT = ["https://www.w3.org/ns/did/v1", "https://w3id.org/oan/v1"] as const;
-export const OAN_DID_ID_RE = /^[A-Z0-9]{4}:[1-9A-HJ-NP-Za-km-z]{32}$/;
+export const OAN_DID_ID_RE = /^[1-9A-HJ-NP-Za-km-z]{5}:[1-9A-HJ-NP-Za-km-z]{32}$/;
 
-export const OAN_RESOURCE_TYPE_BY_SUBJECT_CODE: Record<string, ResourceType> = {
-  AG: "agent_service",
-  SK: "skill",
-  MC: "mcp_server",
-  TL: "tool_api",
-  IN: "infrastructure_node",
-  OR: "organization",
-  DV: "developer",
-};
-
-export function parseDidOan(value: string): { method: string; id: string; semanticCode: string; subjectCode: string } {
+export function parseDidOan(value: string): { method: string; id: string; registrarCode: string; resourceSuffix: string } {
   const segments = value.split(":");
   if (segments.length !== 4 || segments[0] !== "did" || segments[1] !== OAN_METHOD) {
     throw new OanVerificationError("did_method_mismatch");
@@ -30,13 +20,12 @@ export function parseDidOan(value: string): { method: string; id: string; semant
   if (!OAN_DID_ID_RE.test(normalizedId)) {
     throw new OanVerificationError("did_method_mismatch");
   }
-  const semanticCode = normalizedId.split(":")[0] ?? "";
-  const subjectCode = semanticCode.slice(0, 2);
+  const [registrarCode, resourceSuffix] = normalizedId.split(":");
   return {
     method: OAN_METHOD,
     id: normalizedId,
-    semanticCode,
-    subjectCode,
+    registrarCode,
+    resourceSuffix,
   };
 }
 
@@ -45,17 +34,12 @@ export function normalizeDidOanId(id: string): string {
   if (segments.length !== 2) {
     return id;
   }
-  return `${segments[0].toUpperCase()}:${segments[1]}`;
+  return `${segments[0]}:${segments[1]}`;
 }
 
 export function normalizeDidOan(value: string): string {
   const parsed = parseDidOan(value);
   return `did:${OAN_METHOD}:${parsed.id}`;
-}
-
-export function inferResourceTypeFromDidOan(value: string): ResourceType | undefined {
-  const parsed = parseDidOan(value);
-  return OAN_RESOURCE_TYPE_BY_SUBJECT_CODE[parsed.subjectCode];
 }
 
 export function hasDidOanSemanticConflict(
@@ -65,35 +49,26 @@ export function hasDidOanSemanticConflict(
   if (!metadata) {
     return false;
   }
-  const expected = inferResourceTypeFromDidOan(value);
-  if (!expected) {
-    return false;
-  }
-  const subjectType = typeof metadata.subjectType === "string" ? metadata.subjectType : undefined;
-  const resourceType = typeof metadata.resourceType === "string" ? metadata.resourceType : undefined;
-  if (subjectType && subjectType !== expected) {
-    return true;
-  }
-  if (resourceType && resourceType !== expected) {
-    return true;
-  }
+  parseDidOan(value);
   return false;
+}
+
+/** @deprecated Resource type is no longer encoded in the DID. */
+export function inferResourceTypeFromDidOan(_value: string): undefined {
+  return undefined;
 }
 
 export function getDefaultOanMetadataFromDidOan(
   value: string,
 ): Partial<Pick<OanMetadata, "subjectType" | "resourceType">> {
-  const inferred = inferResourceTypeFromDidOan(value);
-  if (!inferred) {
-    return {};
-  }
-  return {
-    subjectType: inferred,
-    resourceType: inferred,
-  };
+  parseDidOan(value);
+  return {};
 }
 
 export function normalizeDidOanMaybe(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeDidOanMaybe(item));
+  }
   if (typeof value !== "string") {
     return value;
   }
@@ -109,7 +84,7 @@ export function normalizeDidDocumentForOan(document: DidDocument): DidDocument {
   return {
     ...document,
     id: normalizedId,
-    controller: normalizeDidOanMaybe(document.controller),
+    controller: normalizeDidOanMaybe(document.controller) as string | string[] | undefined,
     verificationMethod: Array.isArray(document.verificationMethod)
       ? document.verificationMethod.map((method) => {
           const controller =

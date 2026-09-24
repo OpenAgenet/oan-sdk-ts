@@ -11,6 +11,7 @@ import type {
   ResourceType,
 } from "../../protocol-types/src/index.js";
 import { createResourceDidDocumentDraft } from "./index.js";
+import { didDocumentSignatureInput, hashDidDocumentWithProof } from "./index.js";
 
 export type OanIdentityKind = "subject" | "agent" | "node";
 
@@ -91,22 +92,13 @@ export interface ControllerAuthorizationProofOptions {
   now?: Date;
 }
 
-const SUBJECT_CODE_BY_RESOURCE_TYPE: Record<ResourceType, string> = {
-  agent_service: "AG",
-  skill: "SK",
-  mcp_server: "MC",
-  tool_api: "TL",
-  infrastructure_node: "IN",
-  organization: "OR",
-  developer: "DV",
-};
 
 const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 export async function createOanIdentityRecord(
   options: CreateIdentityOptions,
 ): Promise<OanIdentityRecord> {
-  const domainCode = normalizeDomainCode(options.domainCode);
+  const domainCode = normalizeDomainCode(options.domainCode ?? "K7mQ9");
   const did = options.did ?? createDidOan(options.resourceType, domainCode);
   const keyPair = await generateEd25519JwkPair();
   const verificationMethodId = `${did}#key-1`;
@@ -329,20 +321,85 @@ export async function attachControllerAuthorizationProof(
   return submission;
 }
 
-export function createDidOan(resourceType: ResourceType, domainCode = "DM"): string {
-  const subjectCode = SUBJECT_CODE_BY_RESOURCE_TYPE[resourceType];
-  if (!subjectCode) {
-    throw new Error("unsupported_resource_type_for_did_generation");
-  }
-  return `did:oan:${subjectCode}${normalizeDomainCode(domainCode)}:${randomBase58(32)}`;
+export async function finalizeRegistrationSubmissionWithProof(
+  submission: ResourceRegistrationSubmission,
+  options: ControllerAuthorizationProofOptions,
+): Promise<ResourceRegistrationSubmission> {
+  const identity = options.controllerIdentity;
+  submission.didDocument = await signDidDocumentProof(submission.didDocument, identity);
+  submission.didDocumentHash = await hashDidDocumentWithProof(submission.didDocument);
+  return attachControllerAuthorizationProof(submission, options);
 }
 
-export function normalizeDomainCode(value = "DM"): string {
-  const normalized = value.toUpperCase();
-  if (!/^[A-Z0-9]{2}$/.test(normalized)) {
-    throw new Error("invalid_domain_code");
+export async function signDidDocumentProof(
+  document: DidDocument,
+  identity: OanIdentityRecord,
+): Promise<DidDocument> {
+  if (
+    document.controller &&
+    (Array.isArray(document.controller)
+      ? !document.controller.includes(identity.did)
+      : document.controller !== identity.did)
+  ) {
+    throw new Error("did_document_controller_identity_mismatch");
   }
-  return normalized;
+  const methodId = identity.verificationMethodId;
+  const unsigned: DidDocument = {
+    ...document,
+    controller: document.controller ?? identity.did,
+    proof: undefined,
+    verificationMethod: [
+      ...(document.verificationMethod ?? []).filter((method) => method.id !== methodId),
+      {
+        id: methodId,
+        type: "Ed25519VerificationKey2020",
+        controller: identity.did,
+        cryptoSuite: "ed25519-sha256",
+        publicKeyJwk: identity.publicKeyJwk,
+      },
+    ],
+    assertionMethod: Array.from(new Set([...(document.assertionMethod ?? []), methodId])),
+  };
+  const privateKey = await globalThis.crypto.subtle.importKey(
+    "jwk",
+    identity.privateKeyJwk as JsonWebKey,
+    { name: "Ed25519" },
+    false,
+    ["sign"],
+  );
+  const signature = await globalThis.crypto.subtle.sign(
+    { name: "Ed25519" },
+    privateKey,
+    didDocumentSignatureInput(unsigned).buffer as ArrayBuffer,
+  );
+  return {
+    ...unsigned,
+    proof: {
+      type: "Ed25519Signature2020",
+      creator: identity.verificationMethodId,
+      created: new Date().toISOString(),
+      proofPurpose: "assertionMethod",
+      proofValue: base64Url(new Uint8Array(signature)),
+      cryptoSuite: "ed25519-sha256",
+      hashAlgorithm: "sha256",
+      verificationMethod: identity.verificationMethodId,
+    },
+  };
+}
+
+export function createDidOan(_resourceType: ResourceType, domainCode = "DM000"): string {
+  return `did:oan:${normalizeRegistrarCode(domainCode)}:${randomBase58(32)}`;
+}
+
+export function normalizeDomainCode(value = "DM000"): string {
+  return normalizeRegistrarCode(value === "DM" ? "K7mQ9" : value);
+}
+
+export function normalizeRegistrarCode(value = "DM000"): string {
+  if (!/^[1-9A-HJ-NP-Za-km-z]{5}$/.test(value)) {
+    throw new Error("invalid_registrar_code");
+  }
+  return value;
 }
 
 function sanitizeControllerDidDocument(record: OanIdentityRecord): DidDocument {
@@ -398,7 +455,7 @@ async function signDataIntegrityProof(
     proofPurpose,
     proofValue: base64Url(new Uint8Array(signature)),
     cryptoSuite: "ed25519-sha256",
-    hashAlgorithm: "SHA-256",
+    hashAlgorithm: "sha256",
     verificationMethod: record.verificationMethodId,
   };
 }

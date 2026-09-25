@@ -11,13 +11,15 @@ import type {
   ResourceType,
 } from "../../protocol-types/src/index.js";
 import { createResourceDidDocumentDraft } from "./index.js";
-import { didDocumentSignatureInput, hashDidDocumentWithProof } from "./index.js";
+import { didDocumentSignatureInput, hashDidDocumentWithProof, hashRegistrationPackageBinding } from "./index.js";
 
 export type OanIdentityKind = "subject" | "agent" | "node";
 
 export interface OanIdentityProfile {
   label: string;
   resourceType: ResourceType;
+  routingCode?: string;
+  /** @deprecated Use routingCode. */
   domainCode?: string;
   ownerSubjectDid?: string;
   capabilityTags?: string[];
@@ -53,6 +55,8 @@ export interface CreateIdentityOptions {
   label: string;
   resourceType: ResourceType;
   kind: OanIdentityKind;
+  routingCode?: string;
+  /** @deprecated Use routingCode. */
   domainCode?: string;
   did?: string;
   ownerSubjectDid?: string;
@@ -98,8 +102,8 @@ const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvw
 export async function createOanIdentityRecord(
   options: CreateIdentityOptions,
 ): Promise<OanIdentityRecord> {
-  const domainCode = normalizeDomainCode(options.domainCode ?? "K7mQ9");
-  const did = options.did ?? createDidOan(options.resourceType, domainCode);
+  const routingCode = normalizeRoutingCode(options.routingCode ?? options.domainCode ?? "K7mQ9");
+  const did = options.did ?? createDidOan(options.resourceType, routingCode);
   const keyPair = await generateEd25519JwkPair();
   const verificationMethodId = `${did}#key-1`;
   const didDocument = createResourceDidDocumentDraft({
@@ -140,7 +144,8 @@ export async function createOanIdentityRecord(
     profile: {
       label: options.label,
       resourceType: options.resourceType,
-      domainCode,
+      routingCode,
+      domainCode: routingCode,
       ownerSubjectDid: options.ownerSubjectDid,
       capabilityTags: options.capabilityTags,
       authorizedDomains: options.authorizedDomains,
@@ -326,8 +331,10 @@ export async function finalizeRegistrationSubmissionWithProof(
   options: ControllerAuthorizationProofOptions,
 ): Promise<ResourceRegistrationSubmission> {
   const identity = options.controllerIdentity;
+  const hashAlgorithm = submission.hashAlgorithm || "sha256";
   submission.didDocument = await signDidDocumentProof(submission.didDocument, identity);
-  submission.didDocumentHash = await hashDidDocumentWithProof(submission.didDocument);
+  submission.didDocumentHash = `${hashAlgorithm}:${await hashDidDocumentWithProof(submission.didDocument)}`;
+  submission.packageHash = `${hashAlgorithm}:${await hashRegistrationPackageBinding(submission)}`;
   return attachControllerAuthorizationProof(submission, options);
 }
 
@@ -387,17 +394,23 @@ export async function signDidDocumentProof(
   };
 }
 
-export function createDidOan(_resourceType: ResourceType, domainCode = "DM000"): string {
-  return `did:oan:${normalizeRegistrarCode(domainCode)}:${randomBase58(32)}`;
+export function createDidOan(_resourceType: ResourceType, routingCode = "K7mQ9"): string {
+  return `did:oan:${normalizeRoutingCode(routingCode)}:${randomBase58(32)}`;
 }
 
-export function normalizeDomainCode(value = "DM000"): string {
-  return normalizeRegistrarCode(value === "DM" ? "K7mQ9" : value);
+/** @deprecated Use normalizeRoutingCode. */
+export function normalizeDomainCode(value = "K7mQ9"): string {
+  return normalizeRoutingCode(value === "DM" ? "K7mQ9" : value);
 }
 
-export function normalizeRegistrarCode(value = "DM000"): string {
+/** @deprecated Use normalizeRoutingCode. */
+export function normalizeRegistrarCode(value = "K7mQ9"): string {
+  return normalizeRoutingCode(value);
+}
+
+export function normalizeRoutingCode(value = "K7mQ9"): string {
   if (!/^[1-9A-HJ-NP-Za-km-z]{5}$/.test(value)) {
-    throw new Error("invalid_registrar_code");
+    throw new Error("invalid_routing_code");
   }
   return value;
 }

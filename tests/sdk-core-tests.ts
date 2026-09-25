@@ -6,6 +6,7 @@
 import {
   assertDidOan,
   assertUsableLifecycle,
+  buildRegistrationCredentialExternalIdentifiers,
   buildDiscoveryQuery,
   createAgentIdentity,
   createAgentServiceDraft,
@@ -33,10 +34,14 @@ import {
   verifyCandidateMatchesPackage,
   hasDidOanSemanticConflict,
   canonicalJson,
+  createMinimalVerifiablePresentation,
+  hashRegistrationPackageBinding,
   hashDidDocumentWithProof,
   didDocumentSignatureInput,
   finalizeRegistrationSubmissionWithProof,
   getRegistrationExternalIdentifierIds,
+  parseDidOan,
+  parseMinimalVerifiablePresentation,
   signDidDocumentProof,
   verifyResourcePackageShape,
 } from "../packages/sdk-ts/src/index.js";
@@ -210,9 +215,50 @@ const profileV2Vector = JSON.parse(
   externalIdentifierMutationHashSha256: string;
 };
 assertDidOan(profileV2Vector.did.value);
+const parsedProfileDid = parseDidOan(profileV2Vector.did.value);
+assert(parsedProfileDid.routingCode === profileV2Vector.did.routingCode, "parseDidOan routingCode mismatch");
+assert(parsedProfileDid.suffixCode === profileV2Vector.did.suffixCode, "parseDidOan suffixCode mismatch");
+assert(parsedProfileDid.registrarCode === parsedProfileDid.routingCode, "legacy registrarCode alias mismatch");
+assert(parsedProfileDid.resourceSuffix === parsedProfileDid.suffixCode, "legacy resourceSuffix alias mismatch");
 const [, , vectorRoutingCode, vectorSuffixCode] = profileV2Vector.did.value.split(":");
 assert(vectorRoutingCode === profileV2Vector.did.routingCode, "routing-code parse mismatch");
 assert(vectorSuffixCode === profileV2Vector.did.suffixCode, "suffix-code parse mismatch");
+const normalizedDidUrlDocument = normalizeRegistrationSubmissionForOan({
+  resourceDid: profileV2Vector.did.value,
+  resourceType: "skill",
+  didDocument: {
+    id: profileV2Vector.did.value,
+    controller: `${profileV2Vector.did.value}#controller`,
+    verificationMethod: [
+      {
+        id: `${profileV2Vector.did.value}#key-1`,
+        type: "Ed25519VerificationKey2020",
+        controller: `${profileV2Vector.did.value}#controller`,
+        publicKeyMultibase: "zReplaceWithPublicKey",
+      },
+    ],
+    authentication: [`${profileV2Vector.did.value}#key-1`],
+    assertionMethod: [`${profileV2Vector.did.value}#key-1`],
+    oanMetadata: {
+      subjectType: "skill",
+      resourceType: "skill",
+      controllerDid: `${profileV2Vector.did.value}#controller`,
+    },
+  },
+  packageVersion: "1.0.0",
+  metadataHash: "sha256:metadata",
+  packageHash: "sha256:package",
+  hashAlgorithm: "sha256",
+});
+assert(
+  normalizedDidUrlDocument.didDocument.controller === `${profileV2Vector.did.value}#controller`,
+  "DID URL controller reference should retain fragment",
+);
+assert(
+  normalizedDidUrlDocument.didDocument.verificationMethod?.[0]?.controller ===
+    `${profileV2Vector.did.value}#controller`,
+  "verificationMethod controller DID URL should retain fragment",
+);
 for (const didCase of profileV2Vector.didCases) {
   if (didCase.expected === "valid") {
     assertDidOan(didCase.did);
@@ -442,12 +488,49 @@ assert(signedDocument.proof?.hashAlgorithm === "sha256", "DID proof hash algorit
 assert(new TextDecoder().decode(didDocumentSignatureInput(signedDocument)) === new TextDecoder().decode(didDocumentSignatureInput({ ...signedDocument, proof: undefined })), "DID signature input mismatch");
 const documentHash = await hashDidDocumentWithProof(signedDocument);
 assert(/^[0-9a-f]{64}$/.test(documentHash), "DID document hash format mismatch");
+const tamperedSignedDocument = {
+  ...signedDocument,
+  oanMetadata: {
+    ...(signedDocument.oanMetadata ?? {
+      subjectType: "developer",
+      resourceType: "developer",
+    }),
+    lifecycleState: "tampered",
+  },
+};
+assert(
+  await hashDidDocumentWithProof(tamperedSignedDocument) !== documentHash,
+  "DID document hash should change after post-proof field mutation",
+);
 const externalIdDocument = createSkillDraft({
   resourceDid: "did:oan:K7mQ9:DYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
   name: "External ID Skill",
   externalIdentifiers: [{ id: "urn:example:skill", resolutionServiceEndpoint: "https://resolver.example/skill" }],
 });
 assert(getRegistrationExternalIdentifierIds(externalIdDocument)[0] === "urn:example:skill", "external identifier id missing");
+assert(
+  JSON.stringify(buildRegistrationCredentialExternalIdentifiers(externalIdDocument)) ===
+    JSON.stringify([{ id: "urn:example:skill" }]),
+  "registration credential external identifiers must omit resolution endpoints",
+);
+const noExternalIdDocument = createSkillDraft({
+  resourceDid: "did:oan:K7mQ9:EYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  name: "No External ID Skill",
+});
+assert(
+  getRegistrationExternalIdentifierIds(noExternalIdDocument).length === 0,
+  "external identifiers should remain optional",
+);
+const presentation = createMinimalVerifiablePresentation({
+  holder: subjectIdentity.did,
+  verifiableCredential: [
+    {
+      type: ["VerifiableCredential", "OANRegistrationCredential"],
+      credentialSubject: { id: agentIdentity.did },
+    },
+  ],
+});
+assert(parseMinimalVerifiablePresentation(presentation).holder === subjectIdentity.did, "VP holder mismatch");
 const identitySubmission = createRegistrationSubmissionFromIdentity(agentIdentity, {
   manifestUrl: "https://example.org/skills/sdk-test.json",
   packageHash: "sha256:sdk-test-package",
@@ -501,6 +584,31 @@ const verified = await globalThis.crypto.subtle.verify(
   new TextEncoder().encode(testCanonicalJson(controllerProof.challenge)),
 );
 assert(verified, "controllerAuthorizationProof signature should verify");
+const finalizedIdentitySubmission = await finalizeRegistrationSubmissionWithProof(
+  createRegistrationSubmissionFromIdentity(agentIdentity, {
+    manifestUrl: "https://example.org/skills/sdk-test.json",
+    packageHash: "sha256:sdk-test-package",
+    metadataHash: "sha256:sdk-test-metadata",
+  }),
+  {
+    controllerIdentity: subjectIdentity,
+    registrarDid: "did:oan:P9aBc:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  },
+);
+assert(
+  /^sha256:[0-9a-f]{64}$/.test(finalizedIdentitySubmission.didDocumentHash ?? ""),
+  "finalized submission didDocumentHash should keep hash algorithm prefix",
+);
+assert(
+  finalizedIdentitySubmission.controllerAuthorizationProof?.challenge.didDocumentHash ===
+    finalizedIdentitySubmission.didDocumentHash,
+  "controller authorization challenge should bind prefixed didDocumentHash",
+);
+assert(
+  finalizedIdentitySubmission.packageHash ===
+    `sha256:${await hashRegistrationPackageBinding(finalizedIdentitySubmission)}`,
+  "finalized submission packageHash should bind final didDocumentHash",
+);
 const mismatchedSubmission = createRegistrationSubmissionFromIdentity(agentIdentity, {
   manifestUrl: "https://example.org/skills/sdk-test.json",
   packageHash: "sha256:sdk-test-package",

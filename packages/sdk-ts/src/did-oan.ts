@@ -10,7 +10,18 @@ export const OAN_METHOD = "oan";
 export const OAN_DID_CONTEXT = ["https://www.w3.org/ns/did/v1", "https://w3id.org/oan/v1"] as const;
 export const OAN_DID_ID_RE = /^[1-9A-HJ-NP-Za-km-z]{5}:[1-9A-HJ-NP-Za-km-z]{32}$/;
 
-export function parseDidOan(value: string): { method: string; id: string; registrarCode: string; resourceSuffix: string } {
+export interface DidOanParts {
+  method: string;
+  id: string;
+  routingCode: string;
+  suffixCode: string;
+  /** @deprecated Use routingCode. */
+  registrarCode: string;
+  /** @deprecated Use suffixCode. */
+  resourceSuffix: string;
+}
+
+export function parseDidOan(value: string): DidOanParts {
   const segments = value.split(":");
   if (segments.length !== 4 || segments[0] !== "did" || segments[1] !== OAN_METHOD) {
     throw new OanVerificationError("did_method_mismatch");
@@ -20,12 +31,14 @@ export function parseDidOan(value: string): { method: string; id: string; regist
   if (!OAN_DID_ID_RE.test(normalizedId)) {
     throw new OanVerificationError("did_method_mismatch");
   }
-  const [registrarCode, resourceSuffix] = normalizedId.split(":");
+  const [routingCode, suffixCode] = normalizedId.split(":");
   return {
     method: OAN_METHOD,
     id: normalizedId,
-    registrarCode,
-    resourceSuffix,
+    routingCode,
+    suffixCode,
+    registrarCode: routingCode,
+    resourceSuffix: suffixCode,
   };
 }
 
@@ -40,6 +53,12 @@ export function normalizeDidOanId(id: string): string {
 export function normalizeDidOan(value: string): string {
   const parsed = parseDidOan(value);
   return `did:${OAN_METHOD}:${parsed.id}`;
+}
+
+export function normalizeDidOanReference(value: string): string {
+  const [did, fragment] = value.split("#", 2);
+  const normalizedDid = normalizeDidOan(did ?? value);
+  return fragment === undefined ? normalizedDid : `${normalizedDid}#${fragment}`;
 }
 
 export function hasDidOanSemanticConflict(
@@ -73,7 +92,7 @@ export function normalizeDidOanMaybe(value: unknown): unknown {
     return value;
   }
   try {
-    return normalizeDidOan(value);
+    return normalizeDidOanReference(value);
   } catch {
     return value;
   }
@@ -89,7 +108,7 @@ export function normalizeDidDocumentForOan(document: DidDocument): DidDocument {
       ? document.verificationMethod.map((method) => {
           const controller =
             typeof method.controller === "string"
-              ? normalizeDidOan(method.controller)
+              ? normalizeDidOanMaybe(method.controller) as string
               : method.controller;
           return {
             ...method,

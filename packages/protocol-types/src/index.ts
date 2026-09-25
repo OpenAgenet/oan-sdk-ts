@@ -17,7 +17,14 @@ export type ResourceType =
   | "tool_api"
   | "infrastructure_node"
   | "organization"
-  | "developer";
+  | "developer"
+  | "root_node"
+  | "registrar_node"
+  | "discovery_node"
+  | "cdn_node"
+  | "vc_issuer_node"
+  | "trust_indexer_node"
+  | "unspecified";
 
 export type VersionMode = "latest" | "exact" | "constraint" | "any-retained";
 

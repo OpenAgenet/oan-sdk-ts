@@ -12,6 +12,7 @@ import type {
   ResourceDiscoveryCandidate,
   ResourcePackage,
   ResourceDescription,
+  ResourceRegistrationSubmission,
   ServiceEndpoint,
   ResourceType,
   VersionMode,
@@ -67,6 +68,28 @@ export interface OanDiscoveryResultSummary {
   protocols: string[];
   primaryEndpoint?: string;
   trust: OanTrustSummary;
+}
+
+export interface MinimalVerifiableCredential {
+  "@context"?: string | string[];
+  id?: string;
+  type: string | string[];
+  issuer?: string | Record<string, unknown>;
+  issuanceDate?: string;
+  validFrom?: string;
+  credentialSubject: unknown;
+  proof?: DataIntegrityProof;
+  [key: string]: unknown;
+}
+
+export interface MinimalVerifiablePresentation {
+  "@context"?: string | string[];
+  id?: string;
+  type: string | string[];
+  holder?: string;
+  verifiableCredential?: MinimalVerifiableCredential[];
+  proof?: DataIntegrityProof;
+  [key: string]: unknown;
 }
 
 export class OanVerificationError extends Error {
@@ -635,6 +658,35 @@ export async function hashDidDocumentWithProof(document: DidDocument): Promise<s
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+export function buildRegistrationPackageBinding(
+  submission: Pick<
+    ResourceRegistrationSubmission,
+    "packageVersion" | "resourceDid" | "resourceType" | "didDocumentHash" | "metadataHash" | "hashAlgorithm"
+  >,
+): Record<string, unknown> {
+  return {
+    packageVersion: submission.packageVersion,
+    resourceDid: submission.resourceDid,
+    resourceType: submission.resourceType,
+    didDocumentHash: submission.didDocumentHash,
+    metadataHash: submission.metadataHash,
+    hashAlgorithm: submission.hashAlgorithm,
+  };
+}
+
+export async function hashRegistrationPackageBinding(
+  submission: Pick<
+    ResourceRegistrationSubmission,
+    "packageVersion" | "resourceDid" | "resourceType" | "didDocumentHash" | "metadataHash" | "hashAlgorithm"
+  >,
+): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(canonicalJson(buildRegistrationPackageBinding(submission))),
+  );
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 export function getRegistrationExternalIdentifierIds(document: DidDocument): string[] {
   return (document.oanMetadata?.externalIdentifiers ?? [])
     .map((item) => item.id)
@@ -643,6 +695,49 @@ export function getRegistrationExternalIdentifierIds(document: DidDocument): str
 
 export function buildRegistrationExternalIdentifiers(document: DidDocument): Array<{ id: string }> {
   return getRegistrationExternalIdentifierIds(document).map((id) => ({ id }));
+}
+
+export function buildRegistrationCredentialExternalIdentifiers(document: DidDocument): Array<{ id: string }> {
+  return buildRegistrationExternalIdentifiers(document);
+}
+
+export function parseMinimalVerifiableCredential(value: unknown): MinimalVerifiableCredential {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new OanVerificationError("resource_type_mismatch", "credential must be an object");
+  }
+  const credential = value as MinimalVerifiableCredential;
+  if (!credential.type || credential.credentialSubject === undefined) {
+    throw new OanVerificationError("resource_type_mismatch", "credential type and subject are required");
+  }
+  return credential;
+}
+
+export function parseMinimalVerifiablePresentation(value: unknown): MinimalVerifiablePresentation {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new OanVerificationError("resource_type_mismatch", "presentation must be an object");
+  }
+  const presentation = value as MinimalVerifiablePresentation;
+  const types = Array.isArray(presentation.type) ? presentation.type : [presentation.type];
+  if (!types.includes("VerifiablePresentation")) {
+    throw new OanVerificationError("resource_type_mismatch", "presentation type is required");
+  }
+  return presentation;
+}
+
+export function createMinimalVerifiablePresentation(
+  options: {
+    holder?: string;
+    verifiableCredential?: MinimalVerifiableCredential[];
+    id?: string;
+  } = {},
+): MinimalVerifiablePresentation {
+  return {
+    "@context": ["https://www.w3.org/2018/credentials/v1"],
+    id: options.id,
+    type: ["VerifiablePresentation"],
+    holder: options.holder,
+    verifiableCredential: options.verifiableCredential ?? [],
+  };
 }
 
 function sameStringList(left: string[], right: string[]): boolean {

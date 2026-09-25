@@ -32,12 +32,12 @@ function createFetchStub(
   }) as typeof fetch;
 }
 
-const resourceDid = "did:oan:SKDM:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz";
-const versionOnlyResourceDid = "did:oan:SKDM:9KvVersionOnlyRoot2WfHa4Cd5Ej8LgNz";
-const secondCdnResourceDid = "did:oan:SKDM:8MvSecondCdnPage2WfHa4Cd5Ej8LgNz";
-const secondRegistrarResourceDid = "did:oan:SKDM:2RgSecondRegistrarPage2WfHa4Cd5Ej8";
-const firstDiscoveryResourceDid = "did:oan:SKDM:3DsFirstDiscoveryPage2WfHa4Cd5Ej8";
-const secondDiscoveryResourceDid = "did:oan:SKDM:4DsSecondDiscoveryPage2WfHa4Cd5Ej8";
+const resourceDid = "did:oan:K7mQ9:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz";
+const versionOnlyResourceDid = "did:oan:K7mQ9:9KvVersionOnlyRoot2WfHa4Cd5Ej8Lg";
+const secondCdnResourceDid = "did:oan:K7mQ9:8MvSecondCdnPage2WfHa4Cd5Ej8LgNz";
+const secondRegistrarResourceDid = "did:oan:K7mQ9:2RgSecondRegistrarPage2WfHa4Cd5";
+const firstDiscoveryResourceDid = "did:oan:K7mQ9:3DsFirstDiscoveryPage2WfHa4Cd5";
+const secondDiscoveryResourceDid = "did:oan:K7mQ9:4DsSecondDiscoveryPage2WfHa4Cd";
 const submission: ResourceRegistrationSubmission = {
   resourceDid,
   resourceType: "skill",
@@ -76,7 +76,7 @@ function createResourcePackage(did: string): ResourcePackage {
       hashAlgorithm: "sha256",
       updatedAt: "2026-06-23T00:00:00Z",
     },
-    rootProof: { rootDid: "did:oan:AGRT:test" },
+    rootProof: { rootDid: "did:oan:R8tZu:9AbCdEfGhJkLmNoPqRsTuVwXyZaBcDeF" },
     createdAt: "2026-06-23T00:00:00Z",
   };
 }
@@ -140,7 +140,7 @@ const fetchStub = createFetchStub({
   },
   "GET https://registrar.example/registrar/root-authorization": {
     body: {
-      registrarDid: "did:oan:INRG:test",
+      registrarDid: "did:oan:P9aBc:2LmNo3PqRsTuVwXyZaBcDeFgHiJkLmNo",
       rootReachable: true,
       authorization: { status: "authorized" },
     },
@@ -185,7 +185,7 @@ const fetchStub = createFetchStub({
   },
   "GET https://registrar.example/registration/domain-catalog": {
     body: {
-      registrarDid: "did:oan:INRG:test",
+      registrarDid: "did:oan:P9aBc:2LmNo3PqRsTuVwXyZaBcDeFgHiJkLmNo",
       authorizedDomains: ["legal"],
       domains: [{ id: "legal.contract_law", label: "Contract Law", selectable: true }],
     },
@@ -287,7 +287,7 @@ const fetchStub = createFetchStub({
   },
   "GET https://discovery.example/discovery/root-authorization": {
     body: {
-      discoveryDid: "did:oan:INDS:test",
+      discoveryDid: "did:oan:P9aBc:3LmNo3PqRsTuVwXyZaBcDeFgHiJkLmNo",
       rootReachable: true,
       status: "authorized",
       authorizedDomains: ["openagenet.local"],
@@ -295,13 +295,13 @@ const fetchStub = createFetchStub({
   },
   "GET https://discovery.example/discovery/authorized-domains": {
     body: {
-      discoveryDid: "did:oan:INDS:test",
+      discoveryDid: "did:oan:P9aBc:3LmNo3PqRsTuVwXyZaBcDeFgHiJkLmNo",
       authorizedDomains: ["openagenet.local"],
     },
   },
   "POST https://discovery.example/discovery/resources/query": {
     body: {
-      discoveryDid: "did:oan:INDS:test",
+      discoveryDid: "did:oan:P9aBc:3LmNo3PqRsTuVwXyZaBcDeFgHiJkLmNo",
       candidates: [{ resourceDid, resourceType: "skill", score: 1 }],
       createdAt: "2026-06-23T00:00:00Z",
     },
@@ -411,26 +411,26 @@ const fetchStub = createFetchStub({
   },
   "GET https://indexer.example/v1/registrars?status=active": {
     body: {
-      subjects: [{ subject_did: "did:oan:INRG:test" }],
+      subjects: [{ subject_did: "did:oan:P9aBc:2LmNo3PqRsTuVwXyZaBcDeFgHiJkLmNo" }],
     },
   },
   "GET https://indexer.example/v1/discoveries?status=active&domain=openagenet.local": {
     body: {
-      subjects: [{ subject_did: "did:oan:INDS:test" }],
+      subjects: [{ subject_did: "did:oan:P9aBc:3LmNo3PqRsTuVwXyZaBcDeFgHiJkLmNo" }],
     },
   },
   "GET https://indexer.example/v1/vc-issuers?status=active": {
     body: {
-      subjects: [{ subject_did: "did:oan:INVC:test" }],
+      subjects: [{ subject_did: "did:oan:P9aBc:4LmNo3PqRsTuVwXyZaBcDeFgHiJkLmNo" }],
     },
   },
-  "GET https://indexer.example/v1/subjects/2/did%3Aoan%3AINDS%3Atest/governance-active": {
+  "GET https://indexer.example/v1/subjects/2/did%3Aoan%3AP9aBc%3A3LmNo3PqRsTuVwXyZaBcDeFgHiJkLmNo/governance-active": {
     body: {
       governance_active: true,
       authorized: true,
       subject_type: "discovery",
       subject_type_code: 2,
-      subject_did: "did:oan:INDS:test",
+      subject_did: "did:oan:P9aBc:3LmNo3PqRsTuVwXyZaBcDeFgHiJkLmNo",
       status: "active",
       scope: "chain_governance_state_only",
     },
@@ -690,7 +690,10 @@ assert((vcIssuers.subjects ?? []).length === 1, "vc issuers query mismatch");
 const roleCode = subjectTypeCodeForRole("discovery");
 assert(roleCode === 2, "discovery subject type code mismatch");
 
-const decision = await governance.getGovernanceDecision(roleCode!, "did:oan:INDS:test");
+const decision = await governance.getGovernanceDecision(
+  roleCode!,
+  "did:oan:P9aBc:3LmNo3PqRsTuVwXyZaBcDeFgHiJkLmNo",
+);
 assert(decision.authorized, "governance decision mismatch");
 assert(decision.subjectType === "discovery", "governance subject type mismatch");
 assert(

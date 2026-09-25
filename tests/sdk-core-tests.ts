@@ -32,6 +32,7 @@ import {
   verifyArtifactReferenceMaterial,
   verifyCandidateMatchesPackage,
   hasDidOanSemanticConflict,
+  canonicalJson,
   hashDidDocumentWithProof,
   didDocumentSignatureInput,
   finalizeRegistrationSubmissionWithProof,
@@ -40,6 +41,8 @@ import {
   verifyResourcePackageShape,
 } from "../packages/sdk-ts/src/index.js";
 import type { ResourceDiscoveryCandidate, ResourcePackage } from "../packages/protocol-types/src/index.js";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -61,6 +64,15 @@ function expectVerificationCode(fn: () => void, code: string): void {
     throw error;
   }
   throw new Error(`expected verification error: ${code}`);
+}
+
+function expectThrow(fn: () => void, message: string): void {
+  try {
+    fn();
+  } catch {
+    return;
+  }
+  throw new Error(message);
 }
 
 function samplePackage(): ResourcePackage {
@@ -174,6 +186,75 @@ expectVerificationCode(
 );
 
 assert(!hasDidOanSemanticConflict(pkg.resourceDid, { subjectType: "skill", resourceType: "skill" }), "DID must not encode resource type");
+
+const profileV2Vector = JSON.parse(
+  readFileSync(
+    resolve("../oan-protocol-common/test-fixtures/did-oan-profile-v2-cross-language.json"),
+    "utf8",
+  ),
+) as {
+  did: { value: string; routingCode: string; suffixCode: string };
+  didCases: Array<{
+    id: string;
+    did: string;
+    expected: "valid" | "invalid";
+    routingCode?: string;
+    suffixCode?: string;
+  }>;
+  canonicalJsonCase: { value: unknown; canonical: string };
+  documentWithoutProof: Record<string, unknown>;
+  proof: Record<string, unknown>;
+  signatureInputCanonical: string;
+  completeDocumentHashSha256: string;
+  proofMutationHashSha256: string;
+  externalIdentifierMutationHashSha256: string;
+};
+assertDidOan(profileV2Vector.did.value);
+const [, , vectorRoutingCode, vectorSuffixCode] = profileV2Vector.did.value.split(":");
+assert(vectorRoutingCode === profileV2Vector.did.routingCode, "routing-code parse mismatch");
+assert(vectorSuffixCode === profileV2Vector.did.suffixCode, "suffix-code parse mismatch");
+for (const didCase of profileV2Vector.didCases) {
+  if (didCase.expected === "valid") {
+    assertDidOan(didCase.did);
+    const [, , routingCode, suffixCode] = didCase.did.split(":");
+    assert(routingCode === didCase.routingCode, `${didCase.id} routing-code mismatch`);
+    assert(suffixCode === didCase.suffixCode, `${didCase.id} suffix-code mismatch`);
+  } else {
+    expectThrow(() => assertDidOan(didCase.did), `${didCase.id} should be rejected`);
+  }
+}
+assert(canonicalJson(profileV2Vector.canonicalJsonCase.value) === profileV2Vector.canonicalJsonCase.canonical, "canonical JSON vector mismatch");
+assert(
+  new TextDecoder().decode(didDocumentSignatureInput(profileV2Vector.documentWithoutProof as any)) ===
+    profileV2Vector.signatureInputCanonical,
+  "DID document signature input vector mismatch",
+);
+const completeVectorDocument = {
+  ...profileV2Vector.documentWithoutProof,
+  proof: profileV2Vector.proof,
+};
+assert(
+  new TextDecoder().decode(didDocumentSignatureInput(completeVectorDocument as any)) ===
+    profileV2Vector.signatureInputCanonical,
+  "DID document proof must be excluded from signature input",
+);
+assert(
+  await hashDidDocumentWithProof(completeVectorDocument as any) === profileV2Vector.completeDocumentHashSha256,
+  "DID document final hash vector mismatch",
+);
+assert(
+  await hashDidDocumentWithProof({
+    ...completeVectorDocument,
+    proof: { ...profileV2Vector.proof, proofValue: "fixture-proof-value-mutated" },
+  } as any) === profileV2Vector.proofMutationHashSha256,
+  "proof mutation hash vector mismatch",
+);
+const externalIdentifierMutationDocument = structuredClone(completeVectorDocument) as any;
+externalIdentifierMutationDocument.oanMetadata.externalIdentifiers[0].id = "urn:example:skill:changed";
+assert(
+  await hashDidDocumentWithProof(externalIdentifierMutationDocument) === profileV2Vector.externalIdentifierMutationHashSha256,
+  "external identifier mutation hash vector mismatch",
+);
 
 const packageInfo = getArtifactReferences(pkg);
 assert(packageInfo.manifestUrl === "https://example.org/agent/manifest.json", "manifest url mismatch");

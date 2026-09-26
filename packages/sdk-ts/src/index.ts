@@ -6,6 +6,8 @@
 import type {
   DataIntegrityProof,
   DidDocument,
+  OanCredentialStatusReference,
+  OanCredentialType,
   PackageInfo,
   ProtocolBinding,
   ResourceDiscoveryQuery,
@@ -73,11 +75,13 @@ export interface OanDiscoveryResultSummary {
 export interface MinimalVerifiableCredential {
   "@context"?: string | string[];
   id?: string;
-  type: string | string[];
+  type: string | string[] | ["VerifiableCredential", OanCredentialType];
   issuer?: string | Record<string, unknown>;
   issuanceDate?: string;
   validFrom?: string;
   credentialSubject: unknown;
+  credentialStatus?: OanCredentialStatusReference;
+  credentialSchema?: { id: string; type: string; [key: string]: unknown };
   proof?: DataIntegrityProof;
   [key: string]: unknown;
 }

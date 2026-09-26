@@ -144,6 +144,53 @@ export interface DataIntegrityProof {
   [key: string]: unknown;
 }
 
+export type OanCredentialType =
+  | "OANInfrastructureAuthorizationCredential"
+  | "OANResourceRegistrationCredential"
+  | "OANBusinessFactCredential"
+  | "OANQualificationCredential"
+  | "OANAuditResultCredential"
+  | "OANSelfClaimedCapabilityCredential";
+
+export type OanCredentialStatusValue = "active" | "suspended" | "revoked" | "expired" | "unknown";
+
+export interface OanCredentialStatusReference {
+  id: string;
+  type: string;
+  credentialId?: string;
+  subjectDid?: string;
+  issuerDid?: string;
+  status?: OanCredentialStatusValue;
+  sequence?: number;
+  eventDigest?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface OanVerifiableCredential {
+  "@context": string | string[];
+  id?: string;
+  type: ["VerifiableCredential", OanCredentialType];
+  issuer: string;
+  issuanceDate: string;
+  expirationDate?: string;
+  credentialSubject: Record<string, unknown>;
+  credentialStatus?: OanCredentialStatusReference;
+  credentialSchema?: { id: string; type: string; [key: string]: unknown };
+  proof: DataIntegrityProof;
+  [key: string]: unknown;
+}
+
+export interface OanIdentity {
+  id: string;
+  createdAt: string;
+  did: string;
+  verificationMethodId: string;
+  didDocument: DidDocument;
+  publicKeyJwk: Record<string, unknown>;
+  privateKeyJwk: Record<string, unknown>;
+}
+
 export interface ExternalIdentifier {
   id: string;
   resolutionServiceEndpoint?: string;

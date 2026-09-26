@@ -181,6 +181,18 @@ export async function createAgentIdentity(
   });
 }
 
+export async function createControllerIdentity(
+  label: string,
+  options: Partial<CreateIdentityOptions> = {},
+): Promise<OanIdentityRecord> {
+  return createOanIdentityRecord({
+    label,
+    resourceType: "controller",
+    kind: "subject",
+    ...options,
+  });
+}
+
 export function createEmptyIdentityStoreSnapshot(): OanIdentityStoreSnapshot {
   return {
     version: 1,

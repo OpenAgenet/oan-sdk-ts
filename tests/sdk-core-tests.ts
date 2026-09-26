@@ -9,6 +9,7 @@ import {
   buildRegistrationCredentialExternalIdentifiers,
   buildDiscoveryQuery,
   createAgentIdentity,
+  createControllerIdentity,
   createAgentServiceDraft,
   attachControllerAuthorizationProof,
   createDefaultSubjectIdentity,
@@ -503,6 +504,16 @@ assert(lifecycleSummary.level === "warning", "lifecycle summary should be warnin
 assert(lifecycleSummary.warnings.some((item) => item.includes("published-to-cdn")), "lifecycle warning should include stage");
 
 const subjectIdentity = await createDefaultSubjectIdentity("SDK Test Subject");
+const controllerIdentity = await createControllerIdentity("External Controller");
+assert(
+  controllerIdentity.didDocument.oanMetadata?.subjectType === "controller" &&
+    controllerIdentity.didDocument.oanMetadata?.resourceType === "controller",
+  "controller identity should use controller/controller profile",
+);
+assert(
+  controllerIdentity.didDocument.controller === controllerIdentity.did,
+  "controller identity should be self-controlled",
+);
 const agentIdentity = await createAgentIdentity("SDK Test Skill", "skill", subjectIdentity.did, {
   description: "Generated identity-backed skill",
   capabilityTags: ["sdk.identity"],

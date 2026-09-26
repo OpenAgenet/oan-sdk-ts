@@ -22,6 +22,7 @@ import {
   inferResourceTypeFromDidOan,
   importIdentityBundle,
   normalizeDidDocumentForOan,
+  normalizeDidOanReference,
   normalizeDidOan,
   normalizeRegistrationSubmissionForOan,
   OanVerificationError,
@@ -218,6 +219,31 @@ assertDidOan(profileV2Vector.did.value);
 const parsedProfileDid = parseDidOan(profileV2Vector.did.value);
 assert(parsedProfileDid.routingCode === profileV2Vector.did.routingCode, "parseDidOan routingCode mismatch");
 assert(parsedProfileDid.suffixCode === profileV2Vector.did.suffixCode, "parseDidOan suffixCode mismatch");
+assert(
+  normalizeDidOanReference(`${profileV2Vector.did.value}#key-1`) ===
+    `${profileV2Vector.did.value}#key-1`,
+  "DID reference normalization should preserve fragments",
+);
+assert(inferResourceTypeFromDidOan(profileV2Vector.did.value) === undefined, "DID must not infer resource type");
+assert(
+  !hasDidOanSemanticConflict(profileV2Vector.did.value, {
+    subjectType: "skill",
+    resourceType: "agent_service",
+  }),
+  "DID semantic conflict must not depend on metadata resource type",
+);
+expectThrow(
+  () => parseDidOan("did:oan:A7bC:DYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz"),
+  "four-character routing-code must be rejected",
+);
+expectThrow(
+  () => parseDidOan("did:oan:A7bCd:DYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz1"),
+  "33-character suffix-code must be rejected",
+);
+expectThrow(
+  () => parseDidOan("did:oan:0OIl1:DYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz"),
+  "Base58 forbidden characters must be rejected",
+);
 assert(parsedProfileDid.registrarCode === parsedProfileDid.routingCode, "legacy registrarCode alias mismatch");
 assert(parsedProfileDid.resourceSuffix === parsedProfileDid.suffixCode, "legacy resourceSuffix alias mismatch");
 const [, , vectorRoutingCode, vectorSuffixCode] = profileV2Vector.did.value.split(":");
@@ -501,6 +527,20 @@ const tamperedSignedDocument = {
 assert(
   await hashDidDocumentWithProof(tamperedSignedDocument) !== documentHash,
   "DID document hash should change after post-proof field mutation",
+);
+const endpointMutatedDocument = structuredClone(signedDocument);
+endpointMutatedDocument.oanMetadata = {
+  ...(endpointMutatedDocument.oanMetadata as any),
+  externalIdentifiers: [
+    {
+      id: "urn:example:skill",
+      resolutionServiceEndpoint: "https://resolver.example/changed",
+    },
+  ],
+};
+assert(
+  await hashDidDocumentWithProof(endpointMutatedDocument) !== documentHash,
+  "external identifier endpoint mutation must change DID document hash",
 );
 const externalIdDocument = createSkillDraft({
   resourceDid: "did:oan:K7mQ9:DYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",

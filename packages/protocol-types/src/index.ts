@@ -6,7 +6,8 @@
 export type SubjectType =
   | "agent_instance" | "agent_product" | "agent_service" | "skill" | "mcp_server" | "tool_api"
   | "infrastructure_node" | "organization" | "developer" | "root_node" | "registrar_node"
-  | "discovery_node" | "cdn_node" | "vc_issuer_node" | "trust_indexer_node" | "unspecified";
+  | "discovery_node" | "cdn_node" | "vc_issuer_node" | "trust_indexer_node" | "unspecified"
+  | "controller";
 
 export type ResourceType =
   | "agent_instance"
@@ -24,7 +25,8 @@ export type ResourceType =
   | "cdn_node"
   | "vc_issuer_node"
   | "trust_indexer_node"
-  | "unspecified";
+  | "unspecified"
+  | "controller";
 
 export type VersionMode = "latest" | "exact" | "constraint" | "any-retained";
 
@@ -192,7 +194,7 @@ export interface ControllerAuthorizationProofBundle {
 export interface ResourceMetadata {
   resourceDid: string;
   resourceType: ResourceType;
-  subjectType: ResourceType;
+  subjectType: SubjectType;
   publisherDid?: string;
   subjectDid?: string;
   name: string;

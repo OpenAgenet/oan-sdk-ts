@@ -167,6 +167,61 @@ export interface OanCredentialStatusReference {
   [key: string]: unknown;
 }
 
+export interface OanInfrastructureAuthorizationCredentialSubject {
+  id: string;
+  role: "root" | "registrar" | "discovery" | "vc_issuer";
+  subjectType: "infrastructure_node";
+  resourceType: "root_node" | "registrar_node" | "discovery_node" | "vc_issuer_node";
+  endpoint?: string;
+  authorizedDomains: string[];
+  didDocumentHash: string;
+  governanceState: "active" | "suspended" | "revoked";
+  governanceBindingId: string;
+}
+
+export interface OanResourceRegistrationCredentialSubject {
+  id: string;
+  resourceType: ResourceType;
+  subjectType: SubjectType;
+  registrarDid: string;
+  didDocumentHash: string;
+  metadataHash: string;
+  packageHash: string;
+  packageVersion: string;
+  hashAlgorithm: string;
+  authorizedDomains: string[];
+  externalIdentifiers: Array<{ id: string }>;
+  lifecycleState: string;
+}
+
+export interface OanBusinessFactCredentialSubject {
+  id: string;
+  subjectType: string;
+  factType: string;
+  claim: Record<string, unknown>;
+}
+
+export interface OanQualificationCredentialSubject {
+  id: string;
+  subjectType: string;
+  qualificationType: string;
+  qualification: Record<string, unknown>;
+}
+
+export interface OanAuditResultCredentialSubject {
+  id: string;
+  subjectType: string;
+  auditType: string;
+  result: Record<string, unknown>;
+  auditedAt: string;
+}
+
+export interface OanSelfClaimedCapabilityCredentialSubject {
+  id: string;
+  capability: string;
+  claim: Record<string, unknown>;
+}
+
 export interface OanVerifiableCredential {
   "@context": string | string[];
   id?: string;

@@ -32,6 +32,7 @@ import {
   summarizeTrustFromPackage,
   upsertIdentityRecord,
   validateDidDocumentDraft,
+  validateOanIdentityRecord,
   verifyArtifactReferenceMaterial,
   verifyCandidateMatchesPackage,
   hasDidOanSemanticConflict,
@@ -520,6 +521,15 @@ const agentIdentity = await createAgentIdentity("SDK Test Skill", "skill", subje
   authorizedDomains: ["legal"],
   manifestUrl: "https://example.org/skills/sdk-test.json",
 });
+assert(
+  agentIdentity.didDocument.controller === subjectIdentity.did,
+  "resource identity should preserve an external controller",
+);
+assert(
+  agentIdentity.didDocument.verificationMethod?.[0]?.controller === subjectIdentity.did,
+  "resource verification method should be controlled by the external controller",
+);
+validateOanIdentityRecord(agentIdentity);
 const signedDocument = await signDidDocumentProof(subjectIdentity.didDocument, subjectIdentity);
 assert(signedDocument.proof?.hashAlgorithm === "sha256", "DID proof hash algorithm mismatch");
 assert(new TextDecoder().decode(didDocumentSignatureInput(signedDocument)) === new TextDecoder().decode(didDocumentSignatureInput({ ...signedDocument, proof: undefined })), "DID signature input mismatch");

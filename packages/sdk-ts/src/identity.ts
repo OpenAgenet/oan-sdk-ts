@@ -89,6 +89,40 @@ export interface RegistrationMaterialOptions {
   packageInfo?: Record<string, unknown>;
 }
 
+export function validateOanIdentityRecord(record: OanIdentityRecord): void {
+  if (record.did !== record.didDocument.id) throw new Error("identity_did_document_mismatch");
+  if (!record.verificationMethodId) throw new Error("identity_verification_method_missing");
+  const method = record.didDocument.verificationMethod?.find(
+    (item) => item.id === record.verificationMethodId,
+  );
+  const documentController =
+    typeof record.didDocument.controller === "string"
+      ? record.didDocument.controller
+      : undefined;
+  if (!method || !documentController || method.controller !== documentController) {
+    throw new Error("identity_verification_method_mismatch");
+  }
+  if (!record.didDocument.authentication?.includes(record.verificationMethodId)) {
+    throw new Error("identity_authentication_method_missing");
+  }
+  if (!record.didDocument.assertionMethod?.includes(record.verificationMethodId)) {
+    throw new Error("identity_assertion_method_missing");
+  }
+  if (JSON.stringify(method.publicKeyJwk) !== JSON.stringify(record.publicKeyJwk)) {
+    throw new Error("identity_public_key_mismatch");
+  }
+  if (record.didDocument.oanMetadata?.subjectType === "controller"
+    && record.didDocument.oanMetadata.resourceType !== "controller") {
+    throw new Error("identity_controller_profile_mismatch");
+  }
+  if (
+    record.didDocument.oanMetadata?.subjectType === "controller" &&
+    record.didDocument.controller !== record.did
+  ) {
+    throw new Error("identity_controller_not_self_owned");
+  }
+}
+
 export interface ControllerAuthorizationProofOptions {
   controllerIdentity: OanIdentityRecord;
   registrarDid: string;
@@ -126,13 +160,17 @@ export async function createOanIdentityRecord(
   if (Array.isArray(didDocument.verificationMethod) && didDocument.verificationMethod[0]) {
     didDocument.verificationMethod[0] = {
       ...didDocument.verificationMethod[0],
+      controller:
+        typeof didDocument.controller === "string"
+          ? didDocument.controller
+          : did,
       cryptoSuite: "ed25519-sha256",
       publicKeyJwk: keyPair.publicKeyJwk,
       publicKeyMultibase: undefined,
     };
   }
   const createdAt = new Date().toISOString();
-  return {
+  const record = {
     id: buildIdentityRecordId(options.kind, options.resourceType),
     kind: options.kind,
     createdAt,
@@ -154,6 +192,8 @@ export async function createOanIdentityRecord(
       metadata: options.metadata,
     },
   };
+  validateOanIdentityRecord(record);
+  return record;
 }
 
 export async function createDefaultSubjectIdentity(
@@ -297,7 +337,7 @@ export function createRegistrationSubmissionFromIdentity(
     metadataHash: options.metadataHash ?? "sha256:pending-metadata-hash",
     packageHash: options.packageHash ?? "sha256:pending-package-hash",
     hashAlgorithm: options.hashAlgorithm ?? "sha256",
-  };
+  } satisfies ResourceRegistrationSubmission;
 }
 
 export async function attachControllerAuthorizationProof(
@@ -575,3 +615,4 @@ function randomBase58(length: number): string {
   }
   return output;
 }
+

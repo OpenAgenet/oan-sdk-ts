@@ -246,8 +246,8 @@ expectThrow(
   () => parseDidOan("did:oan:0OIl1:DYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz"),
   "Base58 forbidden characters must be rejected",
 );
-assert(parsedProfileDid.registrarCode === parsedProfileDid.routingCode, "legacy registrarCode alias mismatch");
-assert(parsedProfileDid.resourceSuffix === parsedProfileDid.suffixCode, "legacy resourceSuffix alias mismatch");
+assert(!("registrarCode" in parsedProfileDid), "legacy registrarCode alias must not be exposed");
+assert(!("resourceSuffix" in parsedProfileDid), "legacy resourceSuffix alias must not be exposed");
 const [, , vectorRoutingCode, vectorSuffixCode] = profileV2Vector.did.value.split(":");
 assert(vectorRoutingCode === profileV2Vector.did.routingCode, "routing-code parse mismatch");
 assert(vectorSuffixCode === profileV2Vector.did.suffixCode, "suffix-code parse mismatch");

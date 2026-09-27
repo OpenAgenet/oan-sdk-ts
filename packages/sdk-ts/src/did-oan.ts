@@ -15,10 +15,6 @@ export interface DidOanParts {
   id: string;
   routingCode: string;
   suffixCode: string;
-  /** @deprecated Use routingCode. */
-  registrarCode: string;
-  /** @deprecated Use suffixCode. */
-  resourceSuffix: string;
 }
 
 export function parseDidOan(value: string): DidOanParts {
@@ -37,8 +33,6 @@ export function parseDidOan(value: string): DidOanParts {
     id: normalizedId,
     routingCode,
     suffixCode,
-    registrarCode: routingCode,
-    resourceSuffix: suffixCode,
   };
 }
 

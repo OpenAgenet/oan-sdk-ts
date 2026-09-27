@@ -19,8 +19,6 @@ export interface OanIdentityProfile {
   label: string;
   resourceType: ResourceType;
   routingCode?: string;
-  /** @deprecated Use routingCode. */
-  domainCode?: string;
   ownerSubjectDid?: string;
   capabilityTags?: string[];
   authorizedDomains?: string[];
@@ -56,8 +54,6 @@ export interface CreateIdentityOptions {
   resourceType: ResourceType;
   kind: OanIdentityKind;
   routingCode?: string;
-  /** @deprecated Use routingCode. */
-  domainCode?: string;
   did?: string;
   ownerSubjectDid?: string;
   capabilityTags?: string[];
@@ -143,7 +139,7 @@ const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvw
 export async function createOanIdentityRecord(
   options: CreateIdentityOptions,
 ): Promise<OanIdentityRecord> {
-  const routingCode = normalizeRoutingCode(options.routingCode ?? options.domainCode ?? "K7mQ9");
+  const routingCode = normalizeRoutingCode(options.routingCode ?? "K7mQ9");
   const did = options.did ?? createDidOan(options.resourceType, routingCode);
   const keyPair = await generateEd25519JwkPair();
   const verificationMethodId = `${did}#key-1`;
@@ -190,7 +186,6 @@ export async function createOanIdentityRecord(
       label: options.label,
       resourceType: options.resourceType,
       routingCode,
-      domainCode: routingCode,
       ownerSubjectDid: options.ownerSubjectDid,
       capabilityTags: options.capabilityTags,
       authorizedDomains: options.authorizedDomains,

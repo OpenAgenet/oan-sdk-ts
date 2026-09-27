@@ -26,6 +26,16 @@ interface NodeProfileFile {
   profile: OanIdentityProfile;
 }
 
+interface OanIdentityFile {
+  id: string;
+  createdAt: string;
+  did: string;
+  verificationMethodId: string;
+  didDocument: DidDocument;
+  privateKeyJwk: Record<string, unknown>;
+  publicKeyJwk: Record<string, unknown>;
+}
+
 interface LegacyGenesisNodeMetadata {
   id: string;
   role?: string;
@@ -201,7 +211,7 @@ async function loadRecordBucket(
     const records: OanIdentityRecord[] = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
-      records.push(await loadRecord(join(bucketDir, entry.name)));
+      records.push(await loadRecord(join(bucketDir, entry.name), bucket));
     }
     return records;
   } catch {
@@ -209,18 +219,42 @@ async function loadRecordBucket(
   }
 }
 
-async function loadRecord(recordDir: string): Promise<OanIdentityRecord> {
-  const profileFile = JSON.parse(await readFile(join(recordDir, "profile.json"), "utf8")) as NodeProfileFile;
+async function loadRecord(
+  recordDir: string,
+  bucket: "subjects" | "agents" | "nodes",
+): Promise<OanIdentityRecord> {
+  let identity: OanIdentityFile;
+  try {
+    identity = JSON.parse(await readFile(join(recordDir, "identity.json"), "utf8")) as OanIdentityFile;
+  } catch {
+    const profileFile = JSON.parse(await readFile(join(recordDir, "profile.json"), "utf8")) as NodeProfileFile;
+    identity = {
+      id: profileFile.id,
+      createdAt: profileFile.createdAt,
+      did: profileFile.did,
+      verificationMethodId: profileFile.verificationMethodId,
+      didDocument: JSON.parse(await readFile(join(recordDir, "did-document.json"), "utf8")) as DidDocument,
+      privateKeyJwk: JSON.parse(await readFile(join(recordDir, "private-key.jwk.json"), "utf8")) as Record<string, unknown>,
+      publicKeyJwk: JSON.parse(await readFile(join(recordDir, "public-key.jwk.json"), "utf8")) as Record<string, unknown>,
+    };
+    return {
+      ...identity,
+      kind: profileFile.kind,
+      profile: profileFile.profile,
+    };
+  }
   return {
-    id: profileFile.id,
-    kind: profileFile.kind,
-    createdAt: profileFile.createdAt,
-    did: profileFile.did,
-    verificationMethodId: profileFile.verificationMethodId,
-    profile: profileFile.profile,
-    didDocument: JSON.parse(await readFile(join(recordDir, "did-document.json"), "utf8")) as DidDocument,
-    privateKeyJwk: JSON.parse(await readFile(join(recordDir, "private-key.jwk.json"), "utf8")) as Record<string, unknown>,
-    publicKeyJwk: JSON.parse(await readFile(join(recordDir, "public-key.jwk.json"), "utf8")) as Record<string, unknown>,
+    ...identity,
+    kind: bucket === "nodes" ? "node" : bucket === "agents" ? "agent" : "subject",
+    profile: {
+      label:
+        (identity.didDocument.oanMetadata?.resourceDescription?.name as string | undefined) ??
+        identity.did,
+      resourceType: identity.didDocument.oanMetadata?.resourceType ?? "unspecified",
+      ownerSubjectDid: identity.didDocument.oanMetadata?.controllerDid,
+      capabilityTags: identity.didDocument.oanMetadata?.capabilityTags,
+      authorizedDomains: identity.didDocument.oanMetadata?.authorizedDomains,
+    },
   };
 }
 
@@ -234,14 +268,15 @@ async function saveRecordBucket(
   for (const record of records) {
     const recordDir = join(bucketDir, record.id);
     await mkdir(recordDir, { recursive: true });
-    await writeJson(join(recordDir, "profile.json"), {
+    await writeJson(join(recordDir, "identity.json"), {
       id: record.id,
-      kind: record.kind,
       createdAt: record.createdAt,
       did: record.did,
       verificationMethodId: record.verificationMethodId,
-      profile: record.profile,
-    } satisfies NodeProfileFile);
+      didDocument: record.didDocument,
+      privateKeyJwk: record.privateKeyJwk,
+      publicKeyJwk: record.publicKeyJwk,
+    } satisfies OanIdentityFile);
     await writeJson(join(recordDir, "did-document.json"), record.didDocument);
     await writeJson(join(recordDir, "private-key.jwk.json"), record.privateKeyJwk);
     await writeJson(join(recordDir, "public-key.jwk.json"), record.publicKeyJwk);

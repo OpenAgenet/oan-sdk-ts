@@ -95,11 +95,13 @@ export function validateOanIdentityRecord(record: OanIdentityRecord): void {
   const method = record.didDocument.verificationMethod?.find(
     (item) => item.id === record.verificationMethodId,
   );
-  const documentController =
+  const controllerDids =
     typeof record.didDocument.controller === "string"
-      ? record.didDocument.controller
-      : undefined;
-  if (!method || !documentController || method.controller !== documentController) {
+      ? [record.didDocument.controller]
+      : Array.isArray(record.didDocument.controller)
+        ? record.didDocument.controller
+        : [];
+  if (!method || controllerDids.length === 0 || !controllerDids.includes(method.controller)) {
     throw new Error("identity_verification_method_mismatch");
   }
   if (!record.didDocument.authentication?.includes(record.verificationMethodId)) {
@@ -117,7 +119,12 @@ export function validateOanIdentityRecord(record: OanIdentityRecord): void {
   }
   if (
     record.didDocument.oanMetadata?.subjectType === "controller" &&
-    record.didDocument.controller !== record.did
+    !(
+      record.didDocument.controller === record.did ||
+      (Array.isArray(record.didDocument.controller) &&
+        record.didDocument.controller.length === 1 &&
+        record.didDocument.controller[0] === record.did)
+    )
   ) {
     throw new Error("identity_controller_not_self_owned");
   }

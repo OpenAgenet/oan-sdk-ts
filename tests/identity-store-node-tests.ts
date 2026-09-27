@@ -3,7 +3,7 @@
 // Initial author: JINLIANG XU
 // Email: jlxufly@gmail.com
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -39,6 +39,18 @@ try {
   assert(agent.record.profile.ownerSubjectDid === ensured.record.did, "agent owner subject mismatch");
 
   await saveIdentityStoreSnapshot(agent.snapshot, workspace);
+  await access(join(workspace, "agents", agent.record.id, "identity.json"));
+  let legacyProfileExists = true;
+  try {
+    await access(join(workspace, "agents", agent.record.id, "profile.json"));
+  } catch {
+    legacyProfileExists = false;
+  }
+  assert(!legacyProfileExists, "new identity output must not emit legacy profile.json");
+  const identityFile = JSON.parse(
+    await readFile(join(workspace, "agents", agent.record.id, "identity.json"), "utf8"),
+  ) as Record<string, unknown>;
+  assert(!("kind" in identityFile) && !("profile" in identityFile), "identity file must use the minimal model");
   const loaded = await loadIdentityStoreSnapshot(workspace);
   assert(loaded.subjects.length === 1, "loaded subject count mismatch");
   assert(loaded.agents.length === 1, "loaded agent count mismatch");

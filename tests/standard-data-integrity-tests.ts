@@ -11,6 +11,7 @@ import {
   parseProfileV2DidDocument,
   parseProfileV2Jwk,
   parseProfileV2OanIdentity,
+  parseProfileV2VerifiableCredential,
   signProfileV2DataIntegrity,
   verifyProfileV2DataIntegrity,
   validateProfileV2OanIdentityKeyPair,
@@ -158,6 +159,47 @@ for (const invalidDocument of [
   if (!rejected) {
     throw new Error("invalid DID Document was accepted");
   }
+}
+
+for (const invalidProof of [
+  { ...fixture.signed.proof, verificationMethod: `${fixture.signed.issuer}#key-2` },
+  { ...fixture.signed.proof, unexpected: true },
+]) {
+  let rejected = false;
+  try {
+    parseProfileV2DataIntegrityProof(invalidProof);
+  } catch {
+    rejected = true;
+  }
+  if (!rejected) {
+    throw new Error("invalid proof shape was accepted");
+  }
+}
+
+let credentialRejected = false;
+try {
+  parseProfileV2VerifiableCredential({
+    "@context": [
+      "https://www.w3.org/2018/credentials/v1",
+      "https://openagenet.xyz/did-oan-specs/v1",
+      "https://w3id.org/security/suites/ed25519-2020/v1",
+    ],
+    type: ["VerifiableCredential"],
+    issuer: "did:oan:K7mQ9:5HkPq7Vm3RdT9Ya2WcX8Ns4Bf6GjLeZu",
+    issuanceDate: "2026-01-01T00:00:00Z",
+    credentialSubject: { id: "did:oan:K7mQ9:5HkPq7Vm3RdT9Ya2WcX8Ns4Bf6GjLeZu" },
+    proof: {
+      ...fixture.signed.proof,
+      verificationMethod:
+        "did:oan:K7mQ9:5HkPq7Vm3RdT9Ya2WcX8Ns4Bf6GjLeZu#key-1",
+    },
+    creator: "legacy",
+  });
+} catch {
+  credentialRejected = true;
+}
+if (!credentialRejected) {
+  throw new Error("legacy VC field was accepted");
 }
 let identityRejected = false;
 try {

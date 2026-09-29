@@ -175,6 +175,23 @@ export interface ProfileV2DataIntegrityProof {
   verificationMethod: string;
 }
 
+export interface ProfileV2VerifiableCredential {
+  id?: string;
+  "@context": [
+    "https://www.w3.org/2018/credentials/v1",
+    "https://openagenet.xyz/did-oan-specs/v1",
+    "https://w3id.org/security/suites/ed25519-2020/v1",
+  ];
+  type: string[];
+  issuer: string;
+  issuanceDate: string;
+  expirationDate?: string;
+  credentialSubject: Record<string, unknown>;
+  credentialStatus?: Record<string, unknown>;
+  credentialSchema?: Record<string, unknown>;
+  proof: ProfileV2DataIntegrityProof;
+}
+
 export type ProfileV2DocumentLoader = (url: string) => Promise<{
   contextUrl: string | null;
   documentUrl: string;
@@ -184,6 +201,17 @@ export type ProfileV2DocumentLoader = (url: string) => Promise<{
 export interface ProfileV2DataIntegrityOptions {
   created?: string;
   documentLoader?: ProfileV2DocumentLoader;
+}
+
+function rejectProfileV2UnknownFields(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+  error: string,
+): void {
+  const allowedSet = new Set(allowed);
+  if (Object.keys(value).some((key) => !allowedSet.has(key))) {
+    throw new Error(error);
+  }
 }
 
 const profileV2Purposes = (jsigs as { purposes: { AssertionProofPurpose: new () => unknown } }).purposes;
@@ -280,6 +308,7 @@ export function parseProfileV2Jwk(value: unknown, privateKey = false): ProfileV2
     throw new Error("invalid_profile_v2_jwk");
   }
   const jwk = value as Record<string, unknown>;
+  rejectProfileV2UnknownFields(jwk, ["kty", "crv", "x", "d", "alg"], "legacy_profile_v2_jwk_field");
   if (
     jwk.kty !== "OKP" ||
     jwk.crv !== "Ed25519" ||
@@ -299,6 +328,11 @@ export function parseProfileV2DataIntegrityProof(value: unknown): ProfileV2DataI
     throw new Error("invalid_profile_v2_proof");
   }
   const proof = value as Record<string, unknown>;
+  rejectProfileV2UnknownFields(
+    proof,
+    ["type", "created", "proofPurpose", "proofValue", "verificationMethod"],
+    "legacy_profile_v2_proof_field",
+  );
   const keys = Object.keys(proof);
   if (keys.some((key) => ["creator", "cryptoSuite", "hashAlgorithm"].includes(key))) {
     throw new Error("legacy_profile_v2_proof_field");
@@ -308,6 +342,7 @@ export function parseProfileV2DataIntegrityProof(value: unknown): ProfileV2DataI
     proof.proofPurpose !== "assertionMethod" ||
     typeof proof.created !== "string" ||
     typeof proof.verificationMethod !== "string" ||
+    !/^.+#key-1$/.test(proof.verificationMethod) ||
     typeof proof.proofValue !== "string" ||
     !proof.proofValue.startsWith("z") ||
     decodeProfileV2Base58(proof.proofValue.slice(1), 64).length !== 64
@@ -322,6 +357,22 @@ export function parseProfileV2DidDocument(value: unknown): ProfileV2DidDocument 
     throw new Error("invalid_profile_v2_did_document");
   }
   const document = value as Record<string, unknown>;
+  rejectProfileV2UnknownFields(
+    document,
+    [
+      "@context",
+      "id",
+      "controller",
+      "verificationMethod",
+      "authentication",
+      "assertionMethod",
+      "capabilityInvocation",
+      "service",
+      "proof",
+      "oanMetadata",
+    ],
+    "legacy_profile_v2_did_document_field",
+  );
   const contexts = document["@context"];
   if (
     !Array.isArray(contexts) ||
@@ -354,6 +405,11 @@ export function parseProfileV2DidDocument(value: unknown): ProfileV2DidDocument 
   ) {
     throw new Error("invalid_profile_v2_verification_method");
   }
+  rejectProfileV2UnknownFields(
+    key,
+    ["id", "type", "controller", "publicKeyMultibase", "publicKeyJwk"],
+    "legacy_profile_v2_verification_method_field",
+  );
   if ("cryptoSuite" in key || "publicKeyFormat" in key || "privateKeyMultibase" in key) {
     throw new Error("legacy_profile_v2_verification_method_field");
   }
@@ -395,6 +451,59 @@ export function parseProfileV2DidDocument(value: unknown): ProfileV2DidDocument 
     throw new Error("invalid_profile_v2_proof");
   }
   return document as unknown as ProfileV2DidDocument;
+}
+
+export function parseProfileV2VerifiableCredential(
+  value: unknown,
+): ProfileV2VerifiableCredential {
+  if (!value || typeof value !== "object") {
+    throw new Error("invalid_profile_v2_credential");
+  }
+  const credential = value as Record<string, unknown>;
+  rejectProfileV2UnknownFields(
+    credential,
+    [
+      "id",
+      "@context",
+      "type",
+      "issuer",
+      "issuanceDate",
+      "expirationDate",
+      "credentialSubject",
+      "credentialStatus",
+      "credentialSchema",
+      "proof",
+    ],
+    "legacy_profile_v2_credential_field",
+  );
+  const contexts = credential["@context"];
+  if (
+    !Array.isArray(contexts) ||
+    contexts.length !== 3 ||
+    contexts[0] !== "https://www.w3.org/2018/credentials/v1" ||
+    contexts[1] !== "https://openagenet.xyz/did-oan-specs/v1" ||
+    contexts[2] !== "https://w3id.org/security/suites/ed25519-2020/v1"
+  ) {
+    throw new Error("invalid_profile_v2_credential_context");
+  }
+  if (
+    !Array.isArray(credential.type) ||
+    !credential.type.includes("VerifiableCredential") ||
+    typeof credential.issuer !== "string" ||
+    !/^did:oan:[1-9A-HJ-NP-Za-km-z]{5}:[1-9A-HJ-NP-Za-km-z]{32}$/.test(
+      credential.issuer,
+    ) ||
+    typeof credential.issuanceDate !== "string" ||
+    !credential.credentialSubject ||
+    typeof credential.credentialSubject !== "object"
+  ) {
+    throw new Error("invalid_profile_v2_credential");
+  }
+  const proof = parseProfileV2DataIntegrityProof(credential.proof);
+  if (proof.verificationMethod !== `${credential.issuer}#key-1`) {
+    throw new Error("invalid_profile_v2_credential_proof");
+  }
+  return credential as unknown as ProfileV2VerifiableCredential;
 }
 
 export interface ProfileV2OanIdentity {
@@ -478,6 +587,19 @@ export function parseProfileV2OanIdentity(value: unknown): ProfileV2OanIdentity 
     throw new Error("invalid_profile_v2_identity");
   }
   const identity = value as Record<string, unknown>;
+  rejectProfileV2UnknownFields(
+    identity,
+    [
+      "id",
+      "createdAt",
+      "did",
+      "verificationMethodId",
+      "didDocument",
+      "publicKeyJwk",
+      "privateKeyJwk",
+    ],
+    "legacy_profile_v2_identity_field",
+  );
   if (
     typeof identity.id !== "string" ||
     typeof identity.createdAt !== "string" ||

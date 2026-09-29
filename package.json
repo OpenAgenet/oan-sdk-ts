@@ -41,13 +41,20 @@
     "build": "node ./node_modules/typescript/bin/tsc -p tsconfig.build.json",
     "prepack": "npm run build",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
-    "test": "node ./node_modules/tsx/dist/cli.mjs tests/sdk-core-tests.ts && node ./node_modules/tsx/dist/cli.mjs tests/client-workflow-tests.ts && node ./node_modules/tsx/dist/cli.mjs tests/identity-store-node-tests.ts"
+    "test": "node ./node_modules/tsx/dist/cli.mjs tests/sdk-core-tests.ts && node ./node_modules/tsx/dist/cli.mjs tests/client-workflow-tests.ts && node ./node_modules/tsx/dist/cli.mjs tests/identity-store-node-tests.ts && node ./node_modules/tsx/dist/cli.mjs tests/standard-data-integrity-tests.ts"
   },
   "dependencies": {
+    "@digitalbazaar/ed25519-signature-2020": "^5.4.0",
+    "@digitalbazaar/ed25519-verification-key-2020": "^4.1.0",
+    "base58-universal": "^2.0.0",
+    "base64url-universal": "^2.0.0",
+    "ed25519-signature-2020-context": "^1.1.0",
+    "jsonld-signatures": "^11.3.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3"
   },
   "devDependencies": {
-    "@types/node": "^26.0.0"
+    "@types/node": "^26.0.0",
+    "jsonld": "^9.0.0"
   }
 }

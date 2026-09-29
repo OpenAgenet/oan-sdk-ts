@@ -3,6 +3,13 @@
 // Initial author: JINLIANG XU
 // Email: jlxufly@gmail.com
 
+import jsigs from "jsonld-signatures";
+import { Ed25519Signature2020 } from "@digitalbazaar/ed25519-signature-2020";
+import { Ed25519VerificationKey2020 } from "@digitalbazaar/ed25519-verification-key-2020";
+import { documentLoader as ed25519DocumentLoader } from "ed25519-signature-2020-context";
+import { encode as base58Encode } from "base58-universal";
+import { decode as base64urlDecode } from "base64url-universal";
+
 export type SubjectType =
   | "agent_instance" | "agent_product" | "agent_service" | "skill" | "mcp_server" | "tool_api"
   | "infrastructure_node" | "organization" | "developer" | "root_node" | "registrar_node"
@@ -142,6 +149,410 @@ export interface DataIntegrityProof {
   cryptoSuite?: string;
   hashAlgorithm?: string;
   [key: string]: unknown;
+}
+
+export interface ProfileV2Jwk {
+  kty: "OKP";
+  crv: "Ed25519";
+  x: string;
+  d?: string;
+  alg?: "EdDSA";
+}
+
+export interface ProfileV2VerificationMethod {
+  id: string;
+  type: "Ed25519VerificationKey2020";
+  controller: string;
+  publicKeyMultibase?: string;
+  publicKeyJwk?: ProfileV2Jwk;
+}
+
+export interface ProfileV2DataIntegrityProof {
+  type: "Ed25519Signature2020";
+  created: string;
+  proofPurpose: "assertionMethod";
+  proofValue: string;
+  verificationMethod: string;
+}
+
+export type ProfileV2DocumentLoader = (url: string) => Promise<{
+  contextUrl: string | null;
+  documentUrl: string;
+  document: unknown;
+}>;
+
+export interface ProfileV2DataIntegrityOptions {
+  created?: string;
+  documentLoader?: ProfileV2DocumentLoader;
+}
+
+const profileV2Purposes = (jsigs as { purposes: { AssertionProofPurpose: new () => unknown } }).purposes;
+
+function profileV2DefaultDocumentLoader(url: string) {
+  return ed25519DocumentLoader(url);
+}
+
+function profileV2PublicKeyMultibase(jwk: ProfileV2Jwk): string {
+  return `z${base58Encode(new Uint8Array([0xed, 0x01, ...base64urlDecode(jwk.x)]))}`;
+}
+
+function profileV2PrivateKeyMultibase(jwk: ProfileV2Jwk): string {
+  return `z${base58Encode(new Uint8Array([
+    0x80,
+    0x26,
+    ...base64urlDecode(jwk.d as string),
+    ...base64urlDecode(jwk.x),
+  ]))}`;
+}
+
+async function profileV2KeyFromJwk(
+  did: string,
+  jwk: ProfileV2Jwk,
+  includePrivate: boolean,
+) {
+  return Ed25519VerificationKey2020.from({
+    id: `${did}#key-1`,
+    controller: did,
+    publicKeyMultibase: profileV2PublicKeyMultibase(jwk),
+    ...(includePrivate ? { privateKeyMultibase: profileV2PrivateKeyMultibase(jwk) } : {}),
+  });
+}
+
+export async function signProfileV2DataIntegrity(
+  document: Record<string, unknown>,
+  did: string,
+  privateKeyJwk: unknown,
+  options: ProfileV2DataIntegrityOptions = {},
+): Promise<Record<string, unknown>> {
+  const privateJwk = parseProfileV2Jwk(privateKeyJwk, true);
+  const key = await profileV2KeyFromJwk(did, privateJwk, true);
+  const purpose = new profileV2Purposes.AssertionProofPurpose();
+  const signed = await (jsigs as any).sign(document, {
+    suite: new Ed25519Signature2020({
+      key,
+      ...(options.created ? { proof: { created: options.created } } : {}),
+    }),
+    purpose,
+    documentLoader: options.documentLoader ?? profileV2DefaultDocumentLoader,
+  });
+  parseProfileV2DataIntegrityProof(signed.proof);
+  return signed as Record<string, unknown>;
+}
+
+export async function verifyProfileV2DataIntegrity(
+  document: Record<string, unknown>,
+  publicKeyJwk: unknown,
+  options: ProfileV2DataIntegrityOptions = {},
+): Promise<void> {
+  const publicJwk = parseProfileV2Jwk(publicKeyJwk);
+  const proof = parseProfileV2DataIntegrityProof(document.proof);
+  const did = proof.verificationMethod.slice(0, -"#key-1".length);
+  const key = await profileV2KeyFromJwk(did, publicJwk, false);
+  const result = await (jsigs as any).verify(document, {
+    suite: new Ed25519Signature2020({ key }),
+    purpose: new profileV2Purposes.AssertionProofPurpose(),
+    documentLoader: options.documentLoader ?? profileV2DefaultDocumentLoader,
+  });
+  if (!result.verified) {
+    throw result.error ?? new Error("profile_v2_data_integrity_verification_failed");
+  }
+}
+
+export interface ProfileV2DidDocument {
+  "@context": [
+    "https://www.w3.org/ns/did/v1",
+    "https://openagenet.xyz/did-oan-specs/v1",
+    "https://w3id.org/security/suites/ed25519-2020/v1",
+  ];
+  id: string;
+  controller?: string | string[];
+  verificationMethod: ProfileV2VerificationMethod[];
+  authentication: string[];
+  assertionMethod: string[];
+  capabilityInvocation?: string[];
+  service?: unknown[];
+  proof: ProfileV2DataIntegrityProof;
+  oanMetadata?: Record<string, unknown>;
+}
+
+export function parseProfileV2Jwk(value: unknown, privateKey = false): ProfileV2Jwk {
+  if (!value || typeof value !== "object") {
+    throw new Error("invalid_profile_v2_jwk");
+  }
+  const jwk = value as Record<string, unknown>;
+  if (
+    jwk.kty !== "OKP" ||
+    jwk.crv !== "Ed25519" ||
+    typeof jwk.x !== "string" ||
+    (privateKey ? typeof jwk.d !== "string" : jwk.d !== undefined) ||
+    (jwk.alg !== undefined && jwk.alg !== "EdDSA")
+  ) {
+    throw new Error("invalid_profile_v2_jwk");
+  }
+  decodeProfileV2Base64Url(jwk.x, 32);
+  if (privateKey) decodeProfileV2Base64Url(jwk.d as string, 32);
+  return jwk as unknown as ProfileV2Jwk;
+}
+
+export function parseProfileV2DataIntegrityProof(value: unknown): ProfileV2DataIntegrityProof {
+  if (!value || typeof value !== "object") {
+    throw new Error("invalid_profile_v2_proof");
+  }
+  const proof = value as Record<string, unknown>;
+  const keys = Object.keys(proof);
+  if (keys.some((key) => ["creator", "cryptoSuite", "hashAlgorithm"].includes(key))) {
+    throw new Error("legacy_profile_v2_proof_field");
+  }
+  if (
+    proof.type !== "Ed25519Signature2020" ||
+    proof.proofPurpose !== "assertionMethod" ||
+    typeof proof.created !== "string" ||
+    typeof proof.verificationMethod !== "string" ||
+    typeof proof.proofValue !== "string" ||
+    !proof.proofValue.startsWith("z") ||
+    decodeProfileV2Base58(proof.proofValue.slice(1), 64).length !== 64
+  ) {
+    throw new Error("invalid_profile_v2_proof");
+  }
+  return proof as unknown as ProfileV2DataIntegrityProof;
+}
+
+export function parseProfileV2DidDocument(value: unknown): ProfileV2DidDocument {
+  if (!value || typeof value !== "object") {
+    throw new Error("invalid_profile_v2_did_document");
+  }
+  const document = value as Record<string, unknown>;
+  const contexts = document["@context"];
+  if (
+    !Array.isArray(contexts) ||
+    contexts.length !== 3 ||
+    contexts[0] !== "https://www.w3.org/ns/did/v1" ||
+    contexts[1] !== "https://openagenet.xyz/did-oan-specs/v1" ||
+    contexts[2] !== "https://w3id.org/security/suites/ed25519-2020/v1"
+  ) {
+    throw new Error("invalid_profile_v2_context");
+  }
+  if (
+    typeof document.id !== "string" ||
+    !/^did:oan:[1-9A-HJ-NP-Za-km-z]{5}:[1-9A-HJ-NP-Za-km-z]{32}$/.test(document.id)
+  ) {
+    throw new Error("invalid_profile_v2_did");
+  }
+  const methods = document.verificationMethod;
+  if (!Array.isArray(methods)) {
+    throw new Error("invalid_profile_v2_verification_method");
+  }
+  const keyId = `${document.id}#key-1`;
+  const key = methods.find((method) => (method as Record<string, unknown>)?.id === keyId) as
+    | Record<string, unknown>
+    | undefined;
+  if (
+    !key ||
+    key.type !== "Ed25519VerificationKey2020" ||
+    key.controller !== document.id ||
+    (key.publicKeyMultibase === undefined && key.publicKeyJwk === undefined)
+  ) {
+    throw new Error("invalid_profile_v2_verification_method");
+  }
+  if ("cryptoSuite" in key || "publicKeyFormat" in key || "privateKeyMultibase" in key) {
+    throw new Error("legacy_profile_v2_verification_method_field");
+  }
+  let multibaseKey: Uint8Array | undefined;
+  if (key.publicKeyMultibase !== undefined) {
+    if (typeof key.publicKeyMultibase !== "string" || !key.publicKeyMultibase.startsWith("z")) {
+      throw new Error("invalid_profile_v2_verification_method");
+    }
+    try {
+      multibaseKey = decodeProfileV2Base58(key.publicKeyMultibase.slice(1), 34);
+      if (multibaseKey[0] !== 0xed || multibaseKey[1] !== 0x01) {
+        throw new Error("invalid_profile_v2_verification_method");
+      }
+    } catch {
+      throw new Error("invalid_profile_v2_verification_method");
+    }
+  }
+  if (key.publicKeyJwk !== undefined) {
+    const jwk = parseProfileV2Jwk(key.publicKeyJwk);
+    if (multibaseKey) {
+      const jwkBytes = decodeProfileV2Base64Url(jwk.x, 32);
+      const multibasePublicKey = multibaseKey.slice(2);
+      if (
+        jwkBytes.length !== multibasePublicKey.length ||
+        jwkBytes.some((value, index) => value !== multibasePublicKey[index])
+      ) {
+        throw new Error("invalid_profile_v2_verification_method");
+      }
+    }
+  }
+  for (const relationship of ["authentication", "assertionMethod"]) {
+    const values = document[relationship];
+    if (!Array.isArray(values) || !values.includes(keyId)) {
+      throw new Error("invalid_profile_v2_relationship");
+    }
+  }
+  const proof = parseProfileV2DataIntegrityProof(document.proof);
+  if (proof.verificationMethod !== keyId) {
+    throw new Error("invalid_profile_v2_proof");
+  }
+  return document as unknown as ProfileV2DidDocument;
+}
+
+export interface ProfileV2OanIdentity {
+  id: string;
+  createdAt: string;
+  did: string;
+  verificationMethodId: string;
+  didDocument: ProfileV2DidDocument;
+  publicKeyJwk: ProfileV2Jwk;
+  privateKeyJwk: ProfileV2Jwk;
+}
+
+const PROFILE_V2_BASE58_ALPHABET =
+  "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+function decodeProfileV2Base58(value: string, expectedLength: number): Uint8Array {
+  if (!value || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(value)) {
+    throw new Error("invalid_profile_v2_multibase");
+  }
+  const bytes: number[] = [];
+  for (const character of value) {
+    const digit = PROFILE_V2_BASE58_ALPHABET.indexOf(character);
+    if (digit < 0) {
+      throw new Error("invalid_profile_v2_multibase");
+    }
+    let carry = digit;
+    for (let index = 0; index < bytes.length; index += 1) {
+      carry += bytes[index] * 58;
+      bytes[index] = carry & 0xff;
+      carry >>= 8;
+    }
+    while (carry > 0) {
+      bytes.push(carry & 0xff);
+      carry >>= 8;
+    }
+  }
+  for (let index = 0; index < value.length && value[index] === "1"; index += 1) {
+    bytes.push(0);
+  }
+  const decoded = Uint8Array.from(bytes.reverse());
+  if (decoded.length !== expectedLength) {
+    throw new Error("invalid_profile_v2_multibase");
+  }
+  return decoded;
+}
+
+function decodeProfileV2Base64Url(value: string, expectedLength: number): Uint8Array {
+  const expectedLengthInChars = Math.ceil((expectedLength * 8) / 6);
+  if (!/^[A-Za-z0-9_-]+$/.test(value) || value.length !== expectedLengthInChars) {
+    throw new Error("invalid_profile_v2_jwk");
+  }
+  const unusedBits = (value.length * 6) % 8;
+  if (unusedBits !== 0) {
+    const last = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".indexOf(
+      value[value.length - 1],
+    );
+    if (last < 0 || (last & ((1 << unusedBits) - 1)) !== 0) {
+      throw new Error("invalid_profile_v2_jwk");
+    }
+  }
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  const bytes: number[] = [];
+  let buffer = 0;
+  let bits = 0;
+  for (const character of value) {
+    buffer = (buffer << 6) | alphabet.indexOf(character);
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((buffer >> bits) & 0xff);
+    }
+  }
+  if (bytes.length !== expectedLength) {
+    throw new Error("invalid_profile_v2_jwk");
+  }
+  return Uint8Array.from(bytes);
+}
+
+export function parseProfileV2OanIdentity(value: unknown): ProfileV2OanIdentity {
+  if (!value || typeof value !== "object") {
+    throw new Error("invalid_profile_v2_identity");
+  }
+  const identity = value as Record<string, unknown>;
+  if (
+    typeof identity.id !== "string" ||
+    typeof identity.createdAt !== "string" ||
+    typeof identity.did !== "string" ||
+    identity.verificationMethodId !== `${identity.did}#key-1`
+  ) {
+    throw new Error("invalid_profile_v2_identity");
+  }
+  const didDocument = parseProfileV2DidDocument(identity.didDocument);
+  if (didDocument.id !== identity.did) {
+    throw new Error("invalid_profile_v2_identity");
+  }
+  const publicKeyJwk = parseProfileV2Jwk(identity.publicKeyJwk);
+  const privateKeyJwk = parseProfileV2Jwk(identity.privateKeyJwk, true);
+  const method = didDocument.verificationMethod.find(
+    (entry) => entry.id === identity.verificationMethodId,
+  );
+  if (!method) {
+    throw new Error("invalid_profile_v2_identity");
+  }
+  if (method.publicKeyJwk !== undefined) {
+    if (JSON.stringify(method.publicKeyJwk) !== JSON.stringify(publicKeyJwk)) {
+      throw new Error("invalid_profile_v2_identity");
+    }
+  } else if (method.publicKeyMultibase !== undefined) {
+    try {
+      const methodKey = decodeProfileV2Base58(method.publicKeyMultibase.slice(1), 34);
+      const identityKey = decodeProfileV2Base64Url(publicKeyJwk.x, 32);
+      if (
+        methodKey[0] !== 0xed ||
+        methodKey[1] !== 0x01 ||
+        methodKey.slice(2).some((value, index) => value !== identityKey[index])
+      ) {
+        throw new Error("invalid_profile_v2_identity");
+      }
+    } catch {
+      throw new Error("invalid_profile_v2_identity");
+    }
+  } else {
+    throw new Error("invalid_profile_v2_identity");
+  }
+  if (privateKeyJwk.x !== publicKeyJwk.x) {
+    throw new Error("invalid_profile_v2_identity");
+  }
+  return identity as unknown as ProfileV2OanIdentity;
+}
+
+export async function validateProfileV2OanIdentityKeyPair(
+  identity: ProfileV2OanIdentity,
+): Promise<void> {
+  const privateKey = await globalThis.crypto.subtle.importKey(
+    "jwk",
+    identity.privateKeyJwk as JsonWebKey,
+    { name: "Ed25519" },
+    false,
+    ["sign"],
+  );
+  const publicKey = await globalThis.crypto.subtle.importKey(
+    "jwk",
+    identity.publicKeyJwk as JsonWebKey,
+    { name: "Ed25519" },
+    false,
+    ["verify"],
+  );
+  const challenge = new TextEncoder().encode("oan-profile-v2-identity-key-pair");
+  const signature = await globalThis.crypto.subtle.sign("Ed25519", privateKey, challenge);
+  const valid = await globalThis.crypto.subtle.verify(
+    "Ed25519",
+    publicKey,
+    signature,
+    challenge,
+  );
+  if (!valid) {
+    throw new Error("invalid_profile_v2_identity");
+  }
 }
 
 export type OanCredentialType =

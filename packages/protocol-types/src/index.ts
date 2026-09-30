@@ -151,7 +151,7 @@ export interface DataIntegrityProof {
   [key: string]: unknown;
 }
 
-export interface ProfileV2Jwk {
+export interface DidOanJwk {
   kty: "OKP";
   crv: "Ed25519";
   x: string;
@@ -159,15 +159,15 @@ export interface ProfileV2Jwk {
   alg?: "EdDSA";
 }
 
-export interface ProfileV2VerificationMethod {
+export interface DidOanVerificationMethod {
   id: string;
   type: "Ed25519VerificationKey2020";
   controller: string;
   publicKeyMultibase?: string;
-  publicKeyJwk?: ProfileV2Jwk;
+  publicKeyJwk?: DidOanJwk;
 }
 
-export interface ProfileV2DataIntegrityProof {
+export interface DidOanDataIntegrityProof {
   type: "Ed25519Signature2020";
   created: string;
   proofPurpose: "assertionMethod";
@@ -175,7 +175,7 @@ export interface ProfileV2DataIntegrityProof {
   verificationMethod: string;
 }
 
-export interface ProfileV2VerifiableCredential {
+export interface DidOanVerifiableCredential {
   id?: string;
   "@context": [
     "https://www.w3.org/2018/credentials/v1",
@@ -189,21 +189,21 @@ export interface ProfileV2VerifiableCredential {
   credentialSubject: Record<string, unknown>;
   credentialStatus?: Record<string, unknown>;
   credentialSchema?: Record<string, unknown>;
-  proof: ProfileV2DataIntegrityProof;
+  proof: DidOanDataIntegrityProof;
 }
 
-export type ProfileV2DocumentLoader = (url: string) => Promise<{
+export type DidOanDocumentLoader = (url: string) => Promise<{
   contextUrl: string | null;
   documentUrl: string;
   document: unknown;
 }>;
 
-export interface ProfileV2DataIntegrityOptions {
+export interface DidOanDataIntegrityOptions {
   created?: string;
-  documentLoader?: ProfileV2DocumentLoader;
+  documentLoader?: DidOanDocumentLoader;
 }
 
-function rejectProfileV2UnknownFields(
+function rejectDidOanUnknownFields(
   value: Record<string, unknown>,
   allowed: readonly string[],
   error: string,
@@ -214,9 +214,9 @@ function rejectProfileV2UnknownFields(
   }
 }
 
-const profileV2Purposes = (jsigs as { purposes: { AssertionProofPurpose: new () => unknown } }).purposes;
+const didOanPurposes = (jsigs as { purposes: { AssertionProofPurpose: new () => unknown } }).purposes;
 
-function profileV2DefaultDocumentLoader(url: string) {
+function didOanDefaultDocumentLoader(url: string) {
   if (url === "https://www.w3.org/ns/did/v1") {
     return {
       contextUrl: null,
@@ -251,11 +251,11 @@ function profileV2DefaultDocumentLoader(url: string) {
   return ed25519DocumentLoader(url);
 }
 
-function profileV2PublicKeyMultibase(jwk: ProfileV2Jwk): string {
+function didOanPublicKeyMultibase(jwk: DidOanJwk): string {
   return `z${base58Encode(new Uint8Array([0xed, 0x01, ...base64urlDecode(jwk.x)]))}`;
 }
 
-function profileV2PrivateKeyMultibase(jwk: ProfileV2Jwk): string {
+function didOanPrivateKeyMultibase(jwk: DidOanJwk): string {
   return `z${base58Encode(new Uint8Array([
     0x80,
     0x26,
@@ -264,61 +264,61 @@ function profileV2PrivateKeyMultibase(jwk: ProfileV2Jwk): string {
   ]))}`;
 }
 
-async function profileV2KeyFromJwk(
+async function didOanKeyFromJwk(
   did: string,
-  jwk: ProfileV2Jwk,
+  jwk: DidOanJwk,
   includePrivate: boolean,
 ) {
   return Ed25519VerificationKey2020.from({
     id: `${did}#key-1`,
     controller: did,
-    publicKeyMultibase: profileV2PublicKeyMultibase(jwk),
-    ...(includePrivate ? { privateKeyMultibase: profileV2PrivateKeyMultibase(jwk) } : {}),
+    publicKeyMultibase: didOanPublicKeyMultibase(jwk),
+    ...(includePrivate ? { privateKeyMultibase: didOanPrivateKeyMultibase(jwk) } : {}),
   });
 }
 
-export async function signProfileV2DataIntegrity(
+export async function signDidOanDataIntegrity(
   document: Record<string, unknown>,
   did: string,
   privateKeyJwk: unknown,
-  options: ProfileV2DataIntegrityOptions = {},
+  options: DidOanDataIntegrityOptions = {},
 ): Promise<Record<string, unknown>> {
-  const privateJwk = parseProfileV2Jwk(privateKeyJwk, true);
-  const key = await profileV2KeyFromJwk(did, privateJwk, true);
-  const purpose = new profileV2Purposes.AssertionProofPurpose();
+  const privateJwk = parseDidOanJwk(privateKeyJwk, true);
+  const key = await didOanKeyFromJwk(did, privateJwk, true);
+  const purpose = new didOanPurposes.AssertionProofPurpose();
   const signed = await (jsigs as any).sign(document, {
     suite: new Ed25519Signature2020({
       key,
       ...(options.created ? { proof: { created: options.created } } : {}),
     }),
     purpose,
-    documentLoader: options.documentLoader ?? profileV2DefaultDocumentLoader,
+    documentLoader: options.documentLoader ?? didOanDefaultDocumentLoader,
   });
   const proof = Array.isArray(signed.proof) ? signed.proof[0] : signed.proof;
-  parseProfileV2DataIntegrityProof(proof);
+  parseDidOanDataIntegrityProof(proof);
   return { ...signed, proof } as Record<string, unknown>;
 }
 
-export async function verifyProfileV2DataIntegrity(
+export async function verifyDidOanDataIntegrity(
   document: Record<string, unknown>,
   publicKeyJwk: unknown,
-  options: ProfileV2DataIntegrityOptions = {},
+  options: DidOanDataIntegrityOptions = {},
 ): Promise<void> {
-  const publicJwk = parseProfileV2Jwk(publicKeyJwk);
-  const proof = parseProfileV2DataIntegrityProof(document.proof);
+  const publicJwk = parseDidOanJwk(publicKeyJwk);
+  const proof = parseDidOanDataIntegrityProof(document.proof);
   const did = proof.verificationMethod.slice(0, -"#key-1".length);
-  const key = await profileV2KeyFromJwk(did, publicJwk, false);
+  const key = await didOanKeyFromJwk(did, publicJwk, false);
   const result = await (jsigs as any).verify(document, {
     suite: new Ed25519Signature2020({ key }),
-    purpose: new profileV2Purposes.AssertionProofPurpose(),
-    documentLoader: options.documentLoader ?? profileV2DefaultDocumentLoader,
+    purpose: new didOanPurposes.AssertionProofPurpose(),
+    documentLoader: options.documentLoader ?? didOanDefaultDocumentLoader,
   });
   if (!result.verified) {
-    throw result.error ?? new Error("profile_v2_data_integrity_verification_failed");
+    throw result.error ?? new Error("oan_profile_data_integrity_verification_failed");
   }
 }
 
-export interface ProfileV2DidDocument {
+export interface DidOanDocument {
   "@context": [
     "https://www.w3.org/ns/did/v1",
     "https://openagenet.xyz/did-oan-specs/v1",
@@ -326,21 +326,21 @@ export interface ProfileV2DidDocument {
   ];
   id: string;
   controller?: string | string[];
-  verificationMethod: ProfileV2VerificationMethod[];
+  verificationMethod: DidOanVerificationMethod[];
   authentication: string[];
   assertionMethod: string[];
   capabilityInvocation?: string[];
   service?: unknown[];
-  proof: ProfileV2DataIntegrityProof;
+  proof: DidOanDataIntegrityProof;
   oanMetadata?: Record<string, unknown>;
 }
 
-export function parseProfileV2Jwk(value: unknown, privateKey = false): ProfileV2Jwk {
+export function parseDidOanJwk(value: unknown, privateKey = false): DidOanJwk {
   if (!value || typeof value !== "object") {
-    throw new Error("invalid_profile_v2_jwk");
+    throw new Error("invalid_oan_profile_jwk");
   }
   const jwk = value as Record<string, unknown>;
-  rejectProfileV2UnknownFields(jwk, ["kty", "crv", "x", "d", "alg"], "legacy_profile_v2_jwk_field");
+  rejectDidOanUnknownFields(jwk, ["kty", "crv", "x", "d", "alg"], "legacy_jwk_field");
   if (
     jwk.kty !== "OKP" ||
     jwk.crv !== "Ed25519" ||
@@ -348,26 +348,26 @@ export function parseProfileV2Jwk(value: unknown, privateKey = false): ProfileV2
     (privateKey ? typeof jwk.d !== "string" : jwk.d !== undefined) ||
     (jwk.alg !== undefined && jwk.alg !== "EdDSA")
   ) {
-    throw new Error("invalid_profile_v2_jwk");
+    throw new Error("invalid_oan_profile_jwk");
   }
-  decodeProfileV2Base64Url(jwk.x, 32);
-  if (privateKey) decodeProfileV2Base64Url(jwk.d as string, 32);
-  return jwk as unknown as ProfileV2Jwk;
+  decodeDidOanBase64Url(jwk.x, 32);
+  if (privateKey) decodeDidOanBase64Url(jwk.d as string, 32);
+  return jwk as unknown as DidOanJwk;
 }
 
-export function parseProfileV2DataIntegrityProof(value: unknown): ProfileV2DataIntegrityProof {
+export function parseDidOanDataIntegrityProof(value: unknown): DidOanDataIntegrityProof {
   if (!value || typeof value !== "object") {
-    throw new Error("invalid_profile_v2_proof");
+    throw new Error("invalid_oan_profile_proof");
   }
   const proof = value as Record<string, unknown>;
-  rejectProfileV2UnknownFields(
+  rejectDidOanUnknownFields(
     proof,
     ["type", "created", "proofPurpose", "proofValue", "verificationMethod"],
-    "legacy_profile_v2_proof_field",
+    "legacy_proof_field",
   );
   const keys = Object.keys(proof);
   if (keys.some((key) => ["creator", "cryptoSuite", "hashAlgorithm"].includes(key))) {
-    throw new Error("legacy_profile_v2_proof_field");
+    throw new Error("legacy_proof_field");
   }
   if (
     proof.type !== "Ed25519Signature2020" ||
@@ -377,19 +377,19 @@ export function parseProfileV2DataIntegrityProof(value: unknown): ProfileV2DataI
     !/^.+#key-1$/.test(proof.verificationMethod) ||
     typeof proof.proofValue !== "string" ||
     !proof.proofValue.startsWith("z") ||
-    decodeProfileV2Base58(proof.proofValue.slice(1), 64).length !== 64
+    decodeDidOanBase58(proof.proofValue.slice(1), 64).length !== 64
   ) {
-    throw new Error(`invalid_profile_v2_proof:${JSON.stringify(proof)}`);
+    throw new Error(`invalid_oan_profile_proof:${JSON.stringify(proof)}`);
   }
-  return proof as unknown as ProfileV2DataIntegrityProof;
+  return proof as unknown as DidOanDataIntegrityProof;
 }
 
-export function parseProfileV2DidDocument(value: unknown): ProfileV2DidDocument {
+export function parseDidOanDocument(value: unknown): DidOanDocument {
   if (!value || typeof value !== "object") {
-    throw new Error("invalid_profile_v2_did_document");
+    throw new Error("invalid_oan_profile_did_document");
   }
   const document = value as Record<string, unknown>;
-  rejectProfileV2UnknownFields(
+  rejectDidOanUnknownFields(
     document,
     [
       "@context",
@@ -403,7 +403,7 @@ export function parseProfileV2DidDocument(value: unknown): ProfileV2DidDocument 
       "proof",
       "oanMetadata",
     ],
-    "legacy_profile_v2_did_document_field",
+    "legacy_did_document_field",
   );
   const contexts = document["@context"];
   if (
@@ -413,17 +413,17 @@ export function parseProfileV2DidDocument(value: unknown): ProfileV2DidDocument 
     contexts[1] !== "https://openagenet.xyz/did-oan-specs/v1" ||
     contexts[2] !== "https://w3id.org/security/suites/ed25519-2020/v1"
   ) {
-    throw new Error("invalid_profile_v2_context");
+    throw new Error("invalid_oan_profile_context");
   }
   if (
     typeof document.id !== "string" ||
     !/^did:oan:[1-9A-HJ-NP-Za-km-z]{5}:[1-9A-HJ-NP-Za-km-z]{32}$/.test(document.id)
   ) {
-    throw new Error("invalid_profile_v2_did");
+    throw new Error("invalid_oan_profile_did");
   }
   const methods = document.verificationMethod;
   if (!Array.isArray(methods)) {
-    throw new Error("invalid_profile_v2_verification_method");
+    throw new Error("invalid_oan_profile_verification_method");
   }
   const keyId = `${document.id}#key-1`;
   const key = methods.find((method) => (method as Record<string, unknown>)?.id === keyId) as
@@ -435,64 +435,64 @@ export function parseProfileV2DidDocument(value: unknown): ProfileV2DidDocument 
     key.controller !== document.id ||
     (key.publicKeyMultibase === undefined && key.publicKeyJwk === undefined)
   ) {
-    throw new Error("invalid_profile_v2_verification_method");
+    throw new Error("invalid_oan_profile_verification_method");
   }
-  rejectProfileV2UnknownFields(
+  rejectDidOanUnknownFields(
     key,
     ["id", "type", "controller", "publicKeyMultibase", "publicKeyJwk"],
-    "legacy_profile_v2_verification_method_field",
+    "legacy_verification_method_field",
   );
   if ("cryptoSuite" in key || "publicKeyFormat" in key || "privateKeyMultibase" in key) {
-    throw new Error("legacy_profile_v2_verification_method_field");
+    throw new Error("legacy_verification_method_field");
   }
   let multibaseKey: Uint8Array | undefined;
   if (key.publicKeyMultibase !== undefined) {
     if (typeof key.publicKeyMultibase !== "string" || !key.publicKeyMultibase.startsWith("z")) {
-      throw new Error("invalid_profile_v2_verification_method");
+      throw new Error("invalid_oan_profile_verification_method");
     }
     try {
-      multibaseKey = decodeProfileV2Base58(key.publicKeyMultibase.slice(1), 34);
+      multibaseKey = decodeDidOanBase58(key.publicKeyMultibase.slice(1), 34);
       if (multibaseKey[0] !== 0xed || multibaseKey[1] !== 0x01) {
-        throw new Error("invalid_profile_v2_verification_method");
+        throw new Error("invalid_oan_profile_verification_method");
       }
     } catch {
-      throw new Error("invalid_profile_v2_verification_method");
+      throw new Error("invalid_oan_profile_verification_method");
     }
   }
   if (key.publicKeyJwk !== undefined) {
-    const jwk = parseProfileV2Jwk(key.publicKeyJwk);
+    const jwk = parseDidOanJwk(key.publicKeyJwk);
     if (multibaseKey) {
-      const jwkBytes = decodeProfileV2Base64Url(jwk.x, 32);
+      const jwkBytes = decodeDidOanBase64Url(jwk.x, 32);
       const multibasePublicKey = multibaseKey.slice(2);
       if (
         jwkBytes.length !== multibasePublicKey.length ||
         jwkBytes.some((value, index) => value !== multibasePublicKey[index])
       ) {
-        throw new Error("invalid_profile_v2_verification_method");
+        throw new Error("invalid_oan_profile_verification_method");
       }
     }
   }
   for (const relationship of ["authentication", "assertionMethod"]) {
     const values = document[relationship];
     if (!Array.isArray(values) || !values.includes(keyId)) {
-      throw new Error("invalid_profile_v2_relationship");
+      throw new Error("invalid_oan_profile_relationship");
     }
   }
-  const proof = parseProfileV2DataIntegrityProof(document.proof);
+  const proof = parseDidOanDataIntegrityProof(document.proof);
   if (proof.verificationMethod !== keyId) {
-    throw new Error("invalid_profile_v2_proof");
+    throw new Error("invalid_oan_profile_proof");
   }
-  return document as unknown as ProfileV2DidDocument;
+  return document as unknown as DidOanDocument;
 }
 
-export function parseProfileV2VerifiableCredential(
+export function parseDidOanVerifiableCredential(
   value: unknown,
-): ProfileV2VerifiableCredential {
+): DidOanVerifiableCredential {
   if (!value || typeof value !== "object") {
-    throw new Error("invalid_profile_v2_credential");
+    throw new Error("invalid_oan_profile_credential");
   }
   const credential = value as Record<string, unknown>;
-  rejectProfileV2UnknownFields(
+  rejectDidOanUnknownFields(
     credential,
     [
       "id",
@@ -506,7 +506,7 @@ export function parseProfileV2VerifiableCredential(
       "credentialSchema",
       "proof",
     ],
-    "legacy_profile_v2_credential_field",
+    "legacy_oan_profile_credential_field",
   );
   const contexts = credential["@context"];
   if (
@@ -516,7 +516,7 @@ export function parseProfileV2VerifiableCredential(
     contexts[1] !== "https://openagenet.xyz/did-oan-specs/v1" ||
     contexts[2] !== "https://w3id.org/security/suites/ed25519-2020/v1"
   ) {
-    throw new Error("invalid_profile_v2_credential_context");
+    throw new Error("invalid_oan_profile_credential_context");
   }
   if (
     !Array.isArray(credential.type) ||
@@ -529,37 +529,37 @@ export function parseProfileV2VerifiableCredential(
     !credential.credentialSubject ||
     typeof credential.credentialSubject !== "object"
   ) {
-    throw new Error("invalid_profile_v2_credential");
+    throw new Error("invalid_oan_profile_credential");
   }
-  const proof = parseProfileV2DataIntegrityProof(credential.proof);
+  const proof = parseDidOanDataIntegrityProof(credential.proof);
   if (proof.verificationMethod !== `${credential.issuer}#key-1`) {
-    throw new Error("invalid_profile_v2_credential_proof");
+    throw new Error("invalid_oan_profile_credential_proof");
   }
-  return credential as unknown as ProfileV2VerifiableCredential;
+  return credential as unknown as DidOanVerifiableCredential;
 }
 
-export interface ProfileV2OanIdentity {
+export interface DidOanIdentity {
   id: string;
   createdAt: string;
   did: string;
   verificationMethodId: string;
-  didDocument: ProfileV2DidDocument;
-  publicKeyJwk: ProfileV2Jwk;
-  privateKeyJwk: ProfileV2Jwk;
+  didDocument: DidOanDocument;
+  publicKeyJwk: DidOanJwk;
+  privateKeyJwk: DidOanJwk;
 }
 
-const PROFILE_V2_BASE58_ALPHABET =
+const OAN_BASE58_ALPHABET =
   "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
-function decodeProfileV2Base58(value: string, expectedLength: number): Uint8Array {
+function decodeDidOanBase58(value: string, expectedLength: number): Uint8Array {
   if (!value || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(value)) {
-    throw new Error("invalid_profile_v2_multibase");
+    throw new Error("invalid_oan_profile_multibase");
   }
   const bytes: number[] = [];
   for (const character of value) {
-    const digit = PROFILE_V2_BASE58_ALPHABET.indexOf(character);
+    const digit = OAN_BASE58_ALPHABET.indexOf(character);
     if (digit < 0) {
-      throw new Error("invalid_profile_v2_multibase");
+      throw new Error("invalid_oan_profile_multibase");
     }
     let carry = digit;
     for (let index = 0; index < bytes.length; index += 1) {
@@ -577,15 +577,15 @@ function decodeProfileV2Base58(value: string, expectedLength: number): Uint8Arra
   }
   const decoded = Uint8Array.from(bytes.reverse());
   if (decoded.length !== expectedLength) {
-    throw new Error("invalid_profile_v2_multibase");
+    throw new Error("invalid_oan_profile_multibase");
   }
   return decoded;
 }
 
-function decodeProfileV2Base64Url(value: string, expectedLength: number): Uint8Array {
+function decodeDidOanBase64Url(value: string, expectedLength: number): Uint8Array {
   const expectedLengthInChars = Math.ceil((expectedLength * 8) / 6);
   if (!/^[A-Za-z0-9_-]+$/.test(value) || value.length !== expectedLengthInChars) {
-    throw new Error("invalid_profile_v2_jwk");
+    throw new Error("invalid_oan_profile_jwk");
   }
   const unusedBits = (value.length * 6) % 8;
   if (unusedBits !== 0) {
@@ -593,7 +593,7 @@ function decodeProfileV2Base64Url(value: string, expectedLength: number): Uint8A
       value[value.length - 1],
     );
     if (last < 0 || (last & ((1 << unusedBits) - 1)) !== 0) {
-      throw new Error("invalid_profile_v2_jwk");
+      throw new Error("invalid_oan_profile_jwk");
     }
   }
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
@@ -609,17 +609,17 @@ function decodeProfileV2Base64Url(value: string, expectedLength: number): Uint8A
     }
   }
   if (bytes.length !== expectedLength) {
-    throw new Error("invalid_profile_v2_jwk");
+    throw new Error("invalid_oan_profile_jwk");
   }
   return Uint8Array.from(bytes);
 }
 
-export function parseProfileV2OanIdentity(value: unknown): ProfileV2OanIdentity {
+export function parseDidOanIdentity(value: unknown): DidOanIdentity {
   if (!value || typeof value !== "object") {
-    throw new Error("invalid_profile_v2_identity");
+    throw new Error("invalid_oan_profile_identity");
   }
   const identity = value as Record<string, unknown>;
-  rejectProfileV2UnknownFields(
+  rejectDidOanUnknownFields(
     identity,
     [
       "id",
@@ -630,7 +630,7 @@ export function parseProfileV2OanIdentity(value: unknown): ProfileV2OanIdentity 
       "publicKeyJwk",
       "privateKeyJwk",
     ],
-    "legacy_profile_v2_identity_field",
+    "legacy_oan_profile_identity_field",
   );
   if (
     typeof identity.id !== "string" ||
@@ -638,49 +638,49 @@ export function parseProfileV2OanIdentity(value: unknown): ProfileV2OanIdentity 
     typeof identity.did !== "string" ||
     identity.verificationMethodId !== `${identity.did}#key-1`
   ) {
-    throw new Error("invalid_profile_v2_identity");
+    throw new Error("invalid_oan_profile_identity");
   }
-  const didDocument = parseProfileV2DidDocument(identity.didDocument);
+  const didDocument = parseDidOanDocument(identity.didDocument);
   if (didDocument.id !== identity.did) {
-    throw new Error("invalid_profile_v2_identity");
+    throw new Error("invalid_oan_profile_identity");
   }
-  const publicKeyJwk = parseProfileV2Jwk(identity.publicKeyJwk);
-  const privateKeyJwk = parseProfileV2Jwk(identity.privateKeyJwk, true);
+  const publicKeyJwk = parseDidOanJwk(identity.publicKeyJwk);
+  const privateKeyJwk = parseDidOanJwk(identity.privateKeyJwk, true);
   const method = didDocument.verificationMethod.find(
     (entry) => entry.id === identity.verificationMethodId,
   );
   if (!method) {
-    throw new Error("invalid_profile_v2_identity");
+    throw new Error("invalid_oan_profile_identity");
   }
   if (method.publicKeyJwk !== undefined) {
     if (JSON.stringify(method.publicKeyJwk) !== JSON.stringify(publicKeyJwk)) {
-      throw new Error("invalid_profile_v2_identity");
+      throw new Error("invalid_oan_profile_identity");
     }
   } else if (method.publicKeyMultibase !== undefined) {
     try {
-      const methodKey = decodeProfileV2Base58(method.publicKeyMultibase.slice(1), 34);
-      const identityKey = decodeProfileV2Base64Url(publicKeyJwk.x, 32);
+      const methodKey = decodeDidOanBase58(method.publicKeyMultibase.slice(1), 34);
+      const identityKey = decodeDidOanBase64Url(publicKeyJwk.x, 32);
       if (
         methodKey[0] !== 0xed ||
         methodKey[1] !== 0x01 ||
         methodKey.slice(2).some((value, index) => value !== identityKey[index])
       ) {
-        throw new Error("invalid_profile_v2_identity");
+        throw new Error("invalid_oan_profile_identity");
       }
     } catch {
-      throw new Error("invalid_profile_v2_identity");
+      throw new Error("invalid_oan_profile_identity");
     }
   } else {
-    throw new Error("invalid_profile_v2_identity");
+    throw new Error("invalid_oan_profile_identity");
   }
   if (privateKeyJwk.x !== publicKeyJwk.x) {
-    throw new Error("invalid_profile_v2_identity");
+    throw new Error("invalid_oan_profile_identity");
   }
-  return identity as unknown as ProfileV2OanIdentity;
+  return identity as unknown as DidOanIdentity;
 }
 
-export async function validateProfileV2OanIdentityKeyPair(
-  identity: ProfileV2OanIdentity,
+export async function validateDidOanIdentityKeyPair(
+  identity: DidOanIdentity,
 ): Promise<void> {
   const privateKey = await globalThis.crypto.subtle.importKey(
     "jwk",
@@ -696,7 +696,7 @@ export async function validateProfileV2OanIdentityKeyPair(
     false,
     ["verify"],
   );
-  const challenge = new TextEncoder().encode("oan-profile-v2-identity-key-pair");
+  const challenge = new TextEncoder().encode("oan-identity-key-pair");
   const signature = await globalThis.crypto.subtle.sign("Ed25519", privateKey, challenge);
   const valid = await globalThis.crypto.subtle.verify(
     "Ed25519",
@@ -705,7 +705,7 @@ export async function validateProfileV2OanIdentityKeyPair(
     challenge,
   );
   if (!valid) {
-    throw new Error("invalid_profile_v2_identity");
+    throw new Error("invalid_oan_profile_identity");
   }
 }
 

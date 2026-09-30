@@ -7,14 +7,14 @@ import { encode as base64urlEncode } from "base64url-universal";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  parseProfileV2DataIntegrityProof,
-  parseProfileV2DidDocument,
-  parseProfileV2Jwk,
-  parseProfileV2OanIdentity,
-  parseProfileV2VerifiableCredential,
-  signProfileV2DataIntegrity,
-  verifyProfileV2DataIntegrity,
-  validateProfileV2OanIdentityKeyPair,
+  parseDidOanDataIntegrityProof,
+  parseDidOanDocument,
+  parseDidOanJwk,
+  parseDidOanIdentity,
+  parseDidOanVerifiableCredential,
+  signDidOanDataIntegrity,
+  verifyDidOanDataIntegrity,
+  validateDidOanIdentityKeyPair,
 } from "../packages/protocol-types/src/index.js";
 
 const { purposes } = jsigs as any;
@@ -68,7 +68,7 @@ const fixtureJwk = {
   x: base64urlEncode(base58Decode(fixture.key.publicKeyMultibase.slice(1)).slice(2)),
   d: base64urlEncode(base58Decode(fixture.key.privateKeyMultibase.slice(1)).slice(2, 34)),
 };
-const signedFromTs = await signProfileV2DataIntegrity(
+const signedFromTs = await signDidOanDataIntegrity(
   fixture.signed && {
     "@context": fixture.signed["@context"],
     type: fixture.signed.type,
@@ -82,7 +82,7 @@ const signedFromTs = await signProfileV2DataIntegrity(
 if ((signedFromTs.proof as any).proofValue !== fixture.signed.proof.proofValue) {
   throw new Error("TypeScript signature does not match the frozen fixture");
 }
-await verifyProfileV2DataIntegrity(fixture.signed, {
+await verifyDidOanDataIntegrity(fixture.signed, {
   kty: "OKP",
   crv: "Ed25519",
   x: fixtureJwk.x,
@@ -91,8 +91,8 @@ await verifyProfileV2DataIntegrity(fixture.signed, {
 if (!fixture.signed.proof.proofValue.startsWith("z")) {
   throw new Error("standard Data Integrity proofValue must use base58-btc Multibase");
 }
-parseProfileV2DataIntegrityProof(fixture.signed.proof);
-parseProfileV2DidDocument({
+parseDidOanDataIntegrityProof(fixture.signed.proof);
+parseDidOanDocument({
   "@context": [
     "https://www.w3.org/ns/did/v1",
     "https://openagenet.xyz/did-oan-specs/v1",
@@ -152,7 +152,7 @@ for (const invalidDocument of [
 ]) {
   let rejected = false;
   try {
-    parseProfileV2DidDocument(invalidDocument);
+    parseDidOanDocument(invalidDocument);
   } catch {
     rejected = true;
   }
@@ -167,7 +167,7 @@ for (const invalidProof of [
 ]) {
   let rejected = false;
   try {
-    parseProfileV2DataIntegrityProof(invalidProof);
+    parseDidOanDataIntegrityProof(invalidProof);
   } catch {
     rejected = true;
   }
@@ -178,7 +178,7 @@ for (const invalidProof of [
 
 let credentialRejected = false;
 try {
-  parseProfileV2VerifiableCredential({
+  parseDidOanVerifiableCredential({
     "@context": [
       "https://www.w3.org/2018/credentials/v1",
       "https://openagenet.xyz/did-oan-specs/v1",
@@ -203,7 +203,7 @@ if (!credentialRejected) {
 }
 let identityRejected = false;
 try {
-  parseProfileV2OanIdentity({
+  parseDidOanIdentity({
     id: "urn:oan:identity:test",
     createdAt: "2026-01-01T00:00:00Z",
     did: "did:oan:K7mQ9:5HkPq7Vm3RdT9Ya2WcX8Ns4Bf6GjLeZu",
@@ -253,7 +253,7 @@ const identityPublicKeyJwk = {
   crv: "Ed25519" as const,
   x: identityPublicExport.x as string,
 };
-const validIdentity = parseProfileV2OanIdentity({
+const validIdentity = parseDidOanIdentity({
   id: "urn:oan:identity:valid",
   createdAt: "2026-01-01T00:00:00Z",
   did: "did:oan:K7mQ9:5HkPq7Vm3RdT9Ya2WcX8Ns4Bf6GjLeZu",
@@ -281,7 +281,7 @@ const validIdentity = parseProfileV2OanIdentity({
   publicKeyJwk: identityPublicKeyJwk,
   privateKeyJwk: identityPrivateKeyJwk,
 });
-await validateProfileV2OanIdentityKeyPair(validIdentity);
+await validateDidOanIdentityKeyPair(validIdentity);
 const mismatchedIdentity = structuredClone(validIdentity);
 const mismatchKeyPair = (await globalThis.crypto.subtle.generateKey(
   { name: "Ed25519" },
@@ -297,7 +297,7 @@ mismatchedIdentity.privateKeyJwk = {
 };
 let mismatchedIdentityRejected = false;
 try {
-  await validateProfileV2OanIdentityKeyPair(mismatchedIdentity);
+  await validateDidOanIdentityKeyPair(mismatchedIdentity);
 } catch {
   mismatchedIdentityRejected = true;
 }
@@ -313,7 +313,7 @@ for (const legacyProof of [
 ]) {
   let rejected = false;
   try {
-    parseProfileV2DataIntegrityProof(legacyProof);
+    parseDidOanDataIntegrityProof(legacyProof);
   } catch {
     rejected = true;
   }
@@ -327,7 +327,7 @@ for (const legacyJwk of [
 ]) {
   let rejected = false;
   try {
-    parseProfileV2Jwk(legacyJwk);
+    parseDidOanJwk(legacyJwk);
   } catch {
     rejected = true;
   }

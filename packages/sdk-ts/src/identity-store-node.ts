@@ -11,7 +11,7 @@ import {
   createEmptyIdentityStoreSnapshot,
   createOanIdentityRecord,
   type OanIdentityKind,
-  type OanIdentityProfile,
+  type DidOanIdentity,
   type OanIdentityRecord,
   type OanIdentityStoreSnapshot,
   upsertIdentityRecord,
@@ -149,8 +149,8 @@ export async function importGenesisNodeIdentityDirectory(
     did: identity.did,
     verificationMethodId: identity.verificationMethodId,
     didDocument: identity.didDocument,
-    privateKeyJwk: normalizeProfileV2Jwk(identity.privateKeyJwk),
-    publicKeyJwk: normalizeProfileV2Jwk(identity.publicKeyJwk),
+    privateKeyJwk: normalizeOanJwk(identity.privateKeyJwk),
+    publicKeyJwk: normalizeOanJwk(identity.publicKeyJwk),
     profile: {
       label: String(nodeJson.id),
       resourceType: "infrastructure_node",
@@ -205,12 +205,12 @@ async function loadRecord(
       capabilityTags: identity.didDocument.oanMetadata?.capabilityTags,
       authorizedDomains: identity.didDocument.oanMetadata?.authorizedDomains,
     },
-    privateKeyJwk: normalizeProfileV2Jwk(identity.privateKeyJwk),
-    publicKeyJwk: normalizeProfileV2Jwk(identity.publicKeyJwk),
+    privateKeyJwk: normalizeOanJwk(identity.privateKeyJwk),
+    publicKeyJwk: normalizeOanJwk(identity.publicKeyJwk),
   };
 }
 
-function normalizeProfileV2Jwk(value: Record<string, unknown>): Record<string, unknown> {
+function normalizeOanJwk(value: Record<string, unknown>): Record<string, unknown> {
   const next = { ...value };
   delete next.alg;
   delete next.key_ops;
@@ -234,8 +234,8 @@ async function saveRecordBucket(
       did: record.did,
       verificationMethodId: record.verificationMethodId,
       didDocument: record.didDocument,
-      privateKeyJwk: normalizeProfileV2Jwk(record.privateKeyJwk),
-      publicKeyJwk: normalizeProfileV2Jwk(record.publicKeyJwk),
+      privateKeyJwk: normalizeOanJwk(record.privateKeyJwk),
+      publicKeyJwk: normalizeOanJwk(record.publicKeyJwk),
     } satisfies OanIdentityFile);
   }
 }

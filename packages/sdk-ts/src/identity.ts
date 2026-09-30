@@ -13,11 +13,11 @@ import type {
 import { encode as base58Encode } from "base58-universal";
 import { createResourceDidDocumentDraft } from "./index.js";
 import { hashDidDocumentWithProof, hashRegistrationPackageBinding } from "./index.js";
-import { signProfileV2DataIntegrity } from "../../protocol-types/src/index.js";
+import { signDidOanDataIntegrity } from "../../protocol-types/src/index.js";
 
 export type OanIdentityKind = "subject" | "agent" | "node";
 
-export interface OanIdentityProfile {
+export interface DidOanIdentity {
   label: string;
   resourceType: ResourceType;
   routingCode?: string;
@@ -38,7 +38,7 @@ export interface OanIdentityRecord {
   didDocument: DidDocument;
   privateKeyJwk: Record<string, unknown>;
   publicKeyJwk: Record<string, unknown>;
-  profile: OanIdentityProfile;
+  profile: DidOanIdentity;
 }
 
 export interface OanIdentityStoreSnapshot {
@@ -420,7 +420,7 @@ export async function signDidDocumentProof(
     ],
     assertionMethod: Array.from(new Set([...(document.assertionMethod ?? []), methodId])),
   };
-  return await signProfileV2DataIntegrity(
+  return await signDidOanDataIntegrity(
     unsigned as Record<string, unknown>,
     identity.did,
     identity.privateKeyJwk,

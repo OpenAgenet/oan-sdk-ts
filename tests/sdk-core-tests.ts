@@ -199,9 +199,9 @@ expectVerificationCode(
 
 assert(!hasDidOanSemanticConflict(pkg.resourceDid, { subjectType: "skill", resourceType: "skill" }), "DID must not encode resource type");
 
-const profileV2Vector = JSON.parse(
+const oanVector = JSON.parse(
   readFileSync(
-    resolve("../oan-protocol-common/test-fixtures/did-oan-profile-v2-cross-language.json"),
+    resolve("../oan-protocol-common/test-fixtures/did-oan-cross-language.json"),
     "utf8",
   ),
 ) as {
@@ -221,18 +221,18 @@ const profileV2Vector = JSON.parse(
   proofMutationHashSha256: string;
   externalIdentifierMutationHashSha256: string;
 };
-assertDidOan(profileV2Vector.did.value);
-const parsedProfileDid = parseDidOan(profileV2Vector.did.value);
-assert(parsedProfileDid.routingCode === profileV2Vector.did.routingCode, "parseDidOan routingCode mismatch");
-assert(parsedProfileDid.suffixCode === profileV2Vector.did.suffixCode, "parseDidOan suffixCode mismatch");
+assertDidOan(oanVector.did.value);
+const parsedProfileDid = parseDidOan(oanVector.did.value);
+assert(parsedProfileDid.routingCode === oanVector.did.routingCode, "parseDidOan routingCode mismatch");
+assert(parsedProfileDid.suffixCode === oanVector.did.suffixCode, "parseDidOan suffixCode mismatch");
 assert(
-  normalizeDidOanReference(`${profileV2Vector.did.value}#key-1`) ===
-    `${profileV2Vector.did.value}#key-1`,
+  normalizeDidOanReference(`${oanVector.did.value}#key-1`) ===
+    `${oanVector.did.value}#key-1`,
   "DID reference normalization should preserve fragments",
 );
-assert(inferResourceTypeFromDidOan(profileV2Vector.did.value) === undefined, "DID must not infer resource type");
+assert(inferResourceTypeFromDidOan(oanVector.did.value) === undefined, "DID must not infer resource type");
 assert(
-  !hasDidOanSemanticConflict(profileV2Vector.did.value, {
+  !hasDidOanSemanticConflict(oanVector.did.value, {
     subjectType: "skill",
     resourceType: "agent_service",
   }),
@@ -252,29 +252,29 @@ expectThrow(
 );
 assert(!("registrarCode" in parsedProfileDid), "legacy registrarCode alias must not be exposed");
 assert(!("resourceSuffix" in parsedProfileDid), "legacy resourceSuffix alias must not be exposed");
-const [, , vectorRoutingCode, vectorSuffixCode] = profileV2Vector.did.value.split(":");
-assert(vectorRoutingCode === profileV2Vector.did.routingCode, "routing-code parse mismatch");
-assert(vectorSuffixCode === profileV2Vector.did.suffixCode, "suffix-code parse mismatch");
+const [, , vectorRoutingCode, vectorSuffixCode] = oanVector.did.value.split(":");
+assert(vectorRoutingCode === oanVector.did.routingCode, "routing-code parse mismatch");
+assert(vectorSuffixCode === oanVector.did.suffixCode, "suffix-code parse mismatch");
 const normalizedDidUrlDocument = normalizeRegistrationSubmissionForOan({
-  resourceDid: profileV2Vector.did.value,
+  resourceDid: oanVector.did.value,
   resourceType: "skill",
   didDocument: {
-    id: profileV2Vector.did.value,
-    controller: `${profileV2Vector.did.value}#controller`,
+    id: oanVector.did.value,
+    controller: `${oanVector.did.value}#controller`,
     verificationMethod: [
       {
-        id: `${profileV2Vector.did.value}#key-1`,
+        id: `${oanVector.did.value}#key-1`,
         type: "Ed25519VerificationKey2020",
-        controller: `${profileV2Vector.did.value}#controller`,
+        controller: `${oanVector.did.value}#controller`,
         publicKeyMultibase: "zReplaceWithPublicKey",
       },
     ],
-    authentication: [`${profileV2Vector.did.value}#key-1`],
-    assertionMethod: [`${profileV2Vector.did.value}#key-1`],
+    authentication: [`${oanVector.did.value}#key-1`],
+    assertionMethod: [`${oanVector.did.value}#key-1`],
     oanMetadata: {
       subjectType: "skill",
       resourceType: "skill",
-      controllerDid: `${profileV2Vector.did.value}#controller`,
+      controllerDid: `${oanVector.did.value}#controller`,
     },
   },
   packageVersion: "1.0.0",
@@ -283,15 +283,15 @@ const normalizedDidUrlDocument = normalizeRegistrationSubmissionForOan({
   hashAlgorithm: "sha256",
 });
 assert(
-  normalizedDidUrlDocument.didDocument.controller === `${profileV2Vector.did.value}#controller`,
+  normalizedDidUrlDocument.didDocument.controller === `${oanVector.did.value}#controller`,
   "DID URL controller reference should retain fragment",
 );
 assert(
   normalizedDidUrlDocument.didDocument.verificationMethod?.[0]?.controller ===
-    `${profileV2Vector.did.value}#controller`,
+    `${oanVector.did.value}#controller`,
   "verificationMethod controller DID URL should retain fragment",
 );
-for (const didCase of profileV2Vector.didCases) {
+for (const didCase of oanVector.didCases) {
   if (didCase.expected === "valid") {
     assertDidOan(didCase.did);
     const [, , routingCode, suffixCode] = didCase.did.split(":");
@@ -301,36 +301,36 @@ for (const didCase of profileV2Vector.didCases) {
     expectThrow(() => assertDidOan(didCase.did), `${didCase.id} should be rejected`);
   }
 }
-assert(canonicalJson(profileV2Vector.canonicalJsonCase.value) === profileV2Vector.canonicalJsonCase.canonical, "canonical JSON vector mismatch");
+assert(canonicalJson(oanVector.canonicalJsonCase.value) === oanVector.canonicalJsonCase.canonical, "canonical JSON vector mismatch");
 assert(
-  new TextDecoder().decode(didDocumentSignatureInput(profileV2Vector.documentWithoutProof as any)) ===
-    profileV2Vector.signatureInputCanonical,
+  new TextDecoder().decode(didDocumentSignatureInput(oanVector.documentWithoutProof as any)) ===
+    oanVector.signatureInputCanonical,
   "DID document signature input vector mismatch",
 );
 const completeVectorDocument = {
-  ...profileV2Vector.documentWithoutProof,
-  proof: profileV2Vector.proof,
+  ...oanVector.documentWithoutProof,
+  proof: oanVector.proof,
 };
 assert(
   new TextDecoder().decode(didDocumentSignatureInput(completeVectorDocument as any)) ===
-    profileV2Vector.signatureInputCanonical,
+    oanVector.signatureInputCanonical,
   "DID document proof must be excluded from signature input",
 );
 assert(
-  await hashDidDocumentWithProof(completeVectorDocument as any) === profileV2Vector.completeDocumentHashSha256,
+  await hashDidDocumentWithProof(completeVectorDocument as any) === oanVector.completeDocumentHashSha256,
   "DID document final hash vector mismatch",
 );
 assert(
   await hashDidDocumentWithProof({
     ...completeVectorDocument,
-    proof: { ...profileV2Vector.proof, proofValue: "fixture-proof-value-mutated" },
-  } as any) === profileV2Vector.proofMutationHashSha256,
+    proof: { ...oanVector.proof, proofValue: "fixture-proof-value-mutated" },
+  } as any) === oanVector.proofMutationHashSha256,
   "proof mutation hash vector mismatch",
 );
 const externalIdentifierMutationDocument = structuredClone(completeVectorDocument) as any;
 externalIdentifierMutationDocument.oanMetadata.externalIdentifiers[0].id = "urn:example:skill:changed";
 assert(
-  await hashDidDocumentWithProof(externalIdentifierMutationDocument) === profileV2Vector.externalIdentifierMutationHashSha256,
+  await hashDidDocumentWithProof(externalIdentifierMutationDocument) === oanVector.externalIdentifierMutationHashSha256,
   "external identifier mutation hash vector mismatch",
 );
 

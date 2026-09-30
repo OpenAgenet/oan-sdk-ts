@@ -90,7 +90,11 @@ function samplePackage(): ResourcePackage {
     resourceDid,
     resourceType: "agent_service",
     didDocument: {
-      "@context": ["https://www.w3.org/ns/did/v1", "https://w3id.org/oan/v1"],
+      "@context": [
+        "https://www.w3.org/ns/did/v1",
+        "https://openagenet.xyz/did-oan-specs/v1",
+        "https://w3id.org/security/suites/ed25519-2020/v1",
+      ],
       id: resourceDid,
       service: [
         {

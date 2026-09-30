@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import {
   createAgentIdentityNode,
   ensureSubjectIdentityNode,
+  importGenesisNodeIdentityDirectory,
   importLegacyGenesisNodeDirectory,
   loadIdentityStoreSnapshot,
   saveIdentityStoreSnapshot,
@@ -40,13 +41,15 @@ try {
 
   await saveIdentityStoreSnapshot(agent.snapshot, workspace);
   await access(join(workspace, "agents", agent.record.id, "identity.json"));
-  let legacyProfileExists = true;
-  try {
-    await access(join(workspace, "agents", agent.record.id, "profile.json"));
-  } catch {
-    legacyProfileExists = false;
+  for (const legacyFile of ["profile.json", "did-document.json", "private-key.jwk.json", "public-key.jwk.json"]) {
+    let exists = true;
+    try {
+      await access(join(workspace, "agents", agent.record.id, legacyFile));
+    } catch {
+      exists = false;
+    }
+    assert(!exists, `new identity output must not emit legacy ${legacyFile}`);
   }
-  assert(!legacyProfileExists, "new identity output must not emit legacy profile.json");
   const identityFile = JSON.parse(
     await readFile(join(workspace, "agents", agent.record.id, "identity.json"), "utf8"),
   ) as Record<string, unknown>;
@@ -55,10 +58,13 @@ try {
   assert(loaded.subjects.length === 1, "loaded subject count mismatch");
   assert(loaded.agents.length === 1, "loaded agent count mismatch");
 
-  const importedNode = await importLegacyGenesisNodeDirectory(genesisRegistrarDir, workspace);
-  assert(importedNode.record.kind === "node", "legacy import should create node record");
+  const importedNode = await importGenesisNodeIdentityDirectory(genesisRegistrarDir, workspace);
+  assert(importedNode.record.kind === "node", "genesis identity import should create node record");
+  assert(importedNode.record.didDocument.id === importedNode.record.did, "genesis identity DID mismatch");
   const reloaded = await loadIdentityStoreSnapshot(workspace);
-  assert(reloaded.nodes.length === 1, "loaded node count mismatch after legacy import");
+  assert(reloaded.nodes.length === 1, "loaded node count mismatch after genesis import");
+  const importedByCompat = await importLegacyGenesisNodeDirectory(genesisRegistrarDir, workspace);
+  assert(importedByCompat.record.did === importedNode.record.did, "compat import should use unified identity");
 } finally {
   await rm(workspace, { recursive: true, force: true });
 }

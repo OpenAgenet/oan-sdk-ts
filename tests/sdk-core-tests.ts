@@ -531,7 +531,11 @@ assert(
 );
 validateOanIdentityRecord(agentIdentity);
 const signedDocument = await signDidDocumentProof(subjectIdentity.didDocument, subjectIdentity);
-assert(signedDocument.proof?.hashAlgorithm === "sha256", "DID proof hash algorithm mismatch");
+assert(signedDocument.proof?.type === "Ed25519Signature2020", "DID proof type mismatch");
+assert(!("creator" in (signedDocument.proof ?? {})), "DID proof must not contain creator");
+assert(!("cryptoSuite" in (signedDocument.proof ?? {})), "DID proof must not contain cryptoSuite");
+assert(!("hashAlgorithm" in (signedDocument.proof ?? {})), "DID proof must not contain hashAlgorithm");
+assert(signedDocument.proof?.proofValue.startsWith("z"), "DID proof must use Multibase");
 assert(new TextDecoder().decode(didDocumentSignatureInput(signedDocument)) === new TextDecoder().decode(didDocumentSignatureInput({ ...signedDocument, proof: undefined })), "DID signature input mismatch");
 const documentHash = await hashDidDocumentWithProof(signedDocument);
 assert(/^[0-9a-f]{64}$/.test(documentHash), "DID document hash format mismatch");
@@ -604,8 +608,8 @@ assert(
 );
 assert(identitySubmission.didDocument.verificationMethod?.[0]?.publicKeyJwk, "identity-backed draft should carry publicKeyJwk");
 assert(
-  identitySubmission.didDocument.verificationMethod?.[0]?.cryptoSuite === "ed25519-sha256",
-  "identity-backed draft should carry explicit cryptoSuite",
+  !("cryptoSuite" in (identitySubmission.didDocument.verificationMethod?.[0] ?? {})),
+  "identity-backed draft must not carry legacy cryptoSuite",
 );
 identitySubmission.didDocumentHash = "sha256:sdk-test-did-document";
 await attachControllerAuthorizationProof(identitySubmission, {
@@ -627,8 +631,8 @@ assert(
   "controller proof submission should not contain privateKeyJwk",
 );
 assert(
-  controllerProof.controllerDidDocument.verificationMethod?.[0]?.cryptoSuite === "ed25519-sha256",
-  "controller DID document should declare the proof crypto suite",
+  !("cryptoSuite" in (controllerProof.controllerDidDocument.verificationMethod?.[0] ?? {})),
+  "controller DID document must not declare legacy cryptoSuite",
 );
 const verifyKey = await globalThis.crypto.subtle.importKey(
   "jwk",
@@ -637,7 +641,7 @@ const verifyKey = await globalThis.crypto.subtle.importKey(
   false,
   ["verify"],
 );
-const signature = base64UrlToBytes(controllerProof.proof.proofValue);
+const signature = base58MultibaseToBytes(controllerProof.proof.proofValue);
 const verified = await globalThis.crypto.subtle.verify(
   { name: "Ed25519" },
   verifyKey,
@@ -711,6 +715,27 @@ function testCanonicalJson(value: unknown): string {
     .filter(([, entryValue]) => entryValue !== undefined)
     .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
   return `{${entries.map(([key, entryValue]) => `${JSON.stringify(key)}:${testCanonicalJson(entryValue)}`).join(",")}}`;
+}
+
+function base58MultibaseToBytes(value: string): Uint8Array {
+  if (!value.startsWith("z")) throw new Error("expected multibase proof");
+  const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const digits = [...value.slice(1)].map((char) => alphabet.indexOf(char));
+  const bytes: number[] = [];
+  for (const digit of digits) {
+    let carry = digit;
+    for (let index = 0; index < bytes.length; index += 1) {
+      carry += bytes[index] * 58;
+      bytes[index] = carry & 0xff;
+      carry >>= 8;
+    }
+    while (carry > 0) {
+      bytes.push(carry & 0xff);
+      carry >>= 8;
+    }
+  }
+  for (let index = 1; index < value.length && value[index] === "1"; index += 1) bytes.push(0);
+  return Uint8Array.from(bytes.reverse());
 }
 
 function base64UrlToBytes(value: string): Uint8Array {

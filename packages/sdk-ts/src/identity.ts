@@ -10,8 +10,10 @@ import type {
   ResourceRegistrationSubmission,
   ResourceType,
 } from "../../protocol-types/src/index.js";
+import { encode as base58Encode } from "base58-universal";
 import { createResourceDidDocumentDraft } from "./index.js";
-import { didDocumentSignatureInput, hashDidDocumentWithProof, hashRegistrationPackageBinding } from "./index.js";
+import { hashDidDocumentWithProof, hashRegistrationPackageBinding } from "./index.js";
+import { signProfileV2DataIntegrity } from "../../protocol-types/src/index.js";
 
 export type OanIdentityKind = "subject" | "agent" | "node";
 
@@ -167,7 +169,6 @@ export async function createOanIdentityRecord(
         typeof didDocument.controller === "string"
           ? didDocument.controller
           : did,
-      cryptoSuite: "ed25519-sha256",
       publicKeyJwk: keyPair.publicKeyJwk,
       publicKeyMultibase: undefined,
     };
@@ -320,7 +321,6 @@ export function createRegistrationSubmissionFromIdentity(
   if (Array.isArray(draft.verificationMethod) && draft.verificationMethod[0]) {
     draft.verificationMethod[0] = {
       ...draft.verificationMethod[0],
-      cryptoSuite: "ed25519-sha256",
       publicKeyJwk: record.publicKeyJwk,
       publicKeyMultibase: undefined,
     };
@@ -405,47 +405,26 @@ export async function signDidDocumentProof(
     throw new Error("did_document_controller_identity_mismatch");
   }
   const methodId = identity.verificationMethodId;
+  const { proof: _ignoredProof, ...documentWithoutProof } = document;
   const unsigned: DidDocument = {
-    ...document,
+    ...documentWithoutProof,
     controller: document.controller ?? identity.did,
-    proof: undefined,
     verificationMethod: [
       ...(document.verificationMethod ?? []).filter((method) => method.id !== methodId),
       {
         id: methodId,
         type: "Ed25519VerificationKey2020",
         controller: identity.did,
-        cryptoSuite: "ed25519-sha256",
-        publicKeyJwk: identity.publicKeyJwk,
+      publicKeyJwk: identity.publicKeyJwk,
       },
     ],
     assertionMethod: Array.from(new Set([...(document.assertionMethod ?? []), methodId])),
   };
-  const privateKey = await globalThis.crypto.subtle.importKey(
-    "jwk",
-    identity.privateKeyJwk as JsonWebKey,
-    { name: "Ed25519" },
-    false,
-    ["sign"],
-  );
-  const signature = await globalThis.crypto.subtle.sign(
-    { name: "Ed25519" },
-    privateKey,
-    didDocumentSignatureInput(unsigned).buffer as ArrayBuffer,
-  );
-  return {
-    ...unsigned,
-    proof: {
-      type: "Ed25519Signature2020",
-      creator: identity.verificationMethodId,
-      created: new Date().toISOString(),
-      proofPurpose: "assertionMethod",
-      proofValue: base64Url(new Uint8Array(signature)),
-      cryptoSuite: "ed25519-sha256",
-      hashAlgorithm: "sha256",
-      verificationMethod: identity.verificationMethodId,
-    },
-  };
+  return await signProfileV2DataIntegrity(
+    unsigned as Record<string, unknown>,
+    identity.did,
+    identity.privateKeyJwk,
+  ) as DidDocument;
 }
 
 export function createDidOan(_resourceType: ResourceType, routingCode = "K7mQ9"): string {
@@ -481,7 +460,6 @@ function sanitizeControllerDidDocument(record: OanIdentityRecord): DidDocument {
       }),
       id: record.verificationMethodId,
       controller: record.did,
-      cryptoSuite: "ed25519-sha256",
       publicKeyJwk: record.publicKeyJwk,
       publicKeyMultibase: undefined,
     },
@@ -517,12 +495,9 @@ async function signDataIntegrityProof(
   );
   return {
     type: "Ed25519Signature2020",
-    creator: record.did,
     created: new Date().toISOString(),
     proofPurpose,
-    proofValue: base64Url(new Uint8Array(signature)),
-    cryptoSuite: "ed25519-sha256",
-    hashAlgorithm: "sha256",
+    proofValue: `z${base58Encode(new Uint8Array(signature))}`,
     verificationMethod: record.verificationMethodId,
   };
 }
@@ -555,25 +530,6 @@ function canonicalJson(value: unknown): string {
   return `{${entries.map(([key, entryValue]) => `${JSON.stringify(key)}:${canonicalJson(entryValue)}`).join(",")}}`;
 }
 
-function base64Url(bytes: Uint8Array): string {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-  let output = "";
-  for (let index = 0; index < bytes.length; index += 3) {
-    const first = bytes[index];
-    const second = bytes[index + 1];
-    const third = bytes[index + 2];
-    output += alphabet[first >> 2];
-    output += alphabet[((first & 0x03) << 4) | ((second ?? 0) >> 4)];
-    if (index + 1 < bytes.length) {
-      output += alphabet[((second & 0x0f) << 2) | ((third ?? 0) >> 6)];
-    }
-    if (index + 2 < bytes.length) {
-      output += alphabet[third & 0x3f];
-    }
-  }
-  return output;
-}
-
 function bucketForKind(
   snapshot: OanIdentityStoreSnapshot,
   kind: OanIdentityKind,
@@ -602,6 +558,12 @@ async function generateEd25519JwkPair(): Promise<{
     globalThis.crypto.subtle.exportKey("jwk", pair.privateKey),
     globalThis.crypto.subtle.exportKey("jwk", pair.publicKey),
   ]);
+  delete (privateKeyJwk as Record<string, unknown>).alg;
+  delete (publicKeyJwk as Record<string, unknown>).alg;
+  delete (privateKeyJwk as Record<string, unknown>).key_ops;
+  delete (privateKeyJwk as Record<string, unknown>).ext;
+  delete (publicKeyJwk as Record<string, unknown>).key_ops;
+  delete (publicKeyJwk as Record<string, unknown>).ext;
   return {
     privateKeyJwk: privateKeyJwk as Record<string, unknown>,
     publicKeyJwk: publicKeyJwk as Record<string, unknown>,

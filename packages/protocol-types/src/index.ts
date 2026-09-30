@@ -217,6 +217,37 @@ function rejectProfileV2UnknownFields(
 const profileV2Purposes = (jsigs as { purposes: { AssertionProofPurpose: new () => unknown } }).purposes;
 
 function profileV2DefaultDocumentLoader(url: string) {
+  if (url === "https://www.w3.org/ns/did/v1") {
+    return {
+      contextUrl: null,
+      documentUrl: url,
+      document: {
+        "@context": {
+          "@vocab": "https://openagenet.xyz/did-oan-specs#",
+          id: "@id",
+          type: "@type",
+          controller: "https://w3id.org/security#controller",
+          verificationMethod: "https://w3id.org/security#verificationMethod",
+          authentication: "https://w3id.org/security#authenticationMethod",
+          assertionMethod: "https://w3id.org/security#assertionMethod",
+          capabilityInvocation: "https://w3id.org/security#capabilityInvocationMethod",
+          service: "https://www.w3.org/ns/did#service",
+          serviceEndpoint: "https://www.w3.org/ns/did#serviceEndpoint",
+        },
+      },
+    };
+  }
+  if (url === "https://openagenet.xyz/did-oan-specs/v1") {
+    return {
+      contextUrl: null,
+      documentUrl: url,
+      document: {
+        "@context": {
+          oanMetadata: "https://openagenet.xyz/did-oan-specs#oanMetadata",
+        },
+      },
+    };
+  }
   return ed25519DocumentLoader(url);
 }
 
@@ -263,8 +294,9 @@ export async function signProfileV2DataIntegrity(
     purpose,
     documentLoader: options.documentLoader ?? profileV2DefaultDocumentLoader,
   });
-  parseProfileV2DataIntegrityProof(signed.proof);
-  return signed as Record<string, unknown>;
+  const proof = Array.isArray(signed.proof) ? signed.proof[0] : signed.proof;
+  parseProfileV2DataIntegrityProof(proof);
+  return { ...signed, proof } as Record<string, unknown>;
 }
 
 export async function verifyProfileV2DataIntegrity(
@@ -347,7 +379,7 @@ export function parseProfileV2DataIntegrityProof(value: unknown): ProfileV2DataI
     !proof.proofValue.startsWith("z") ||
     decodeProfileV2Base58(proof.proofValue.slice(1), 64).length !== 64
   ) {
-    throw new Error("invalid_profile_v2_proof");
+    throw new Error(`invalid_profile_v2_proof:${JSON.stringify(proof)}`);
   }
   return proof as unknown as ProfileV2DataIntegrityProof;
 }

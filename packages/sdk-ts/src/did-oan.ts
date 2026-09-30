@@ -7,7 +7,11 @@ import type { DidDocument, OanMetadata, ResourceRegistrationSubmission } from ".
 import { OanVerificationError } from "./index.js";
 
 export const OAN_METHOD = "oan";
-export const OAN_DID_CONTEXT = ["https://www.w3.org/ns/did/v1", "https://w3id.org/oan/v1"] as const;
+export const OAN_DID_CONTEXT = [
+  "https://www.w3.org/ns/did/v1",
+  "https://openagenet.xyz/did-oan-specs/v1",
+  "https://w3id.org/security/suites/ed25519-2020/v1",
+] as const;
 export const OAN_DID_ID_RE = /^[1-9A-HJ-NP-Za-km-z]{5}:[1-9A-HJ-NP-Za-km-z]{32}$/;
 
 export interface DidOanParts {

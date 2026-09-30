@@ -4,8 +4,8 @@
 // Email: jlxufly@gmail.com
 
 import { homedir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
-import { copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import type { DidDocument, ResourceType } from "../../protocol-types/src/index.js";
 import {
   createEmptyIdentityStoreSnapshot,
@@ -16,15 +16,6 @@ import {
   type OanIdentityStoreSnapshot,
   upsertIdentityRecord,
 } from "./identity.js";
-
-interface NodeProfileFile {
-  id: string;
-  kind: OanIdentityKind;
-  createdAt: string;
-  did: string;
-  verificationMethodId: string;
-  profile: OanIdentityProfile;
-}
 
 interface OanIdentityFile {
   id: string;
@@ -40,11 +31,6 @@ interface LegacyGenesisNodeMetadata {
   id: string;
   role?: string;
   did: string;
-  didDocumentFile?: string;
-  keyFiles?: {
-    privateKeyJwk?: string;
-    publicKeyJwk?: string;
-  };
   governanceNoticeFile?: string;
   rootAuthorizationCredentialFile?: string;
   [key: string]: unknown;
@@ -146,29 +132,25 @@ export async function importLegacyGenesisNodeDirectory(
   legacyDir: string,
   identityDir = getDefaultIdentityStoreDir(),
 ): Promise<{ record: OanIdentityRecord; snapshot: OanIdentityStoreSnapshot; identityDir: string }> {
-  const root = resolve(legacyDir);
+  return importGenesisNodeIdentityDirectory(legacyDir, identityDir);
+}
+
+export async function importGenesisNodeIdentityDirectory(
+  nodeDir: string,
+  identityDir = getDefaultIdentityStoreDir(),
+): Promise<{ record: OanIdentityRecord; snapshot: OanIdentityStoreSnapshot; identityDir: string }> {
+  const root = resolve(nodeDir);
   const nodeJson = JSON.parse(await readFile(join(root, "node.json"), "utf8")) as LegacyGenesisNodeMetadata;
-  const didDocument = JSON.parse(
-    await readFile(join(root, nodeJson.didDocumentFile ?? "did-document.json"), "utf8"),
-  ) as DidDocument;
-  const privateKeyJwk = JSON.parse(
-    await readFile(join(root, nodeJson.keyFiles?.privateKeyJwk ?? "private-key.jwk.json"), "utf8"),
-  ) as Record<string, unknown>;
-  const publicKeyJwk = JSON.parse(
-    await readFile(join(root, nodeJson.keyFiles?.publicKeyJwk ?? "public-key.jwk.json"), "utf8"),
-  ) as Record<string, unknown>;
+  const identity = JSON.parse(await readFile(join(root, "identity.json"), "utf8")) as OanIdentityFile;
   const record: OanIdentityRecord = {
     id: `node-${nodeJson.id}`,
     kind: "node",
-    createdAt: new Date().toISOString(),
-    did: nodeJson.did,
-    verificationMethodId:
-      typeof didDocument.verificationMethod?.[0]?.id === "string"
-        ? didDocument.verificationMethod[0].id
-        : `${nodeJson.did}#key-1`,
-    didDocument,
-    privateKeyJwk,
-    publicKeyJwk,
+    createdAt: identity.createdAt,
+    did: identity.did,
+    verificationMethodId: identity.verificationMethodId,
+    didDocument: identity.didDocument,
+    privateKeyJwk: normalizeProfileV2Jwk(identity.privateKeyJwk),
+    publicKeyJwk: normalizeProfileV2Jwk(identity.publicKeyJwk),
     profile: {
       label: String(nodeJson.id),
       resourceType: "infrastructure_node",
@@ -178,19 +160,6 @@ export async function importLegacyGenesisNodeDirectory(
   };
   const snapshot = upsertIdentityRecord(await loadIdentityStoreSnapshot(identityDir), record);
   await saveIdentityStoreSnapshot(snapshot, identityDir);
-  const recordDir = join(identityDir, "nodes", record.id);
-  await mkdir(join(recordDir, "legacy"), { recursive: true });
-  for (const filename of [
-    "node.json",
-    nodeJson.didDocumentFile ?? "did-document.json",
-    nodeJson.keyFiles?.privateKeyJwk ?? "private-key.jwk.json",
-    nodeJson.keyFiles?.publicKeyJwk ?? "public-key.jwk.json",
-    nodeJson.governanceNoticeFile,
-    nodeJson.rootAuthorizationCredentialFile,
-  ]) {
-    if (!filename) continue;
-    await copyFile(join(root, filename), join(recordDir, "legacy", basename(filename)));
-  }
   return { record, snapshot, identityDir };
 }
 
@@ -223,26 +192,7 @@ async function loadRecord(
   recordDir: string,
   bucket: "subjects" | "agents" | "nodes",
 ): Promise<OanIdentityRecord> {
-  let identity: OanIdentityFile;
-  try {
-    identity = JSON.parse(await readFile(join(recordDir, "identity.json"), "utf8")) as OanIdentityFile;
-  } catch {
-    const profileFile = JSON.parse(await readFile(join(recordDir, "profile.json"), "utf8")) as NodeProfileFile;
-    identity = {
-      id: profileFile.id,
-      createdAt: profileFile.createdAt,
-      did: profileFile.did,
-      verificationMethodId: profileFile.verificationMethodId,
-      didDocument: JSON.parse(await readFile(join(recordDir, "did-document.json"), "utf8")) as DidDocument,
-      privateKeyJwk: JSON.parse(await readFile(join(recordDir, "private-key.jwk.json"), "utf8")) as Record<string, unknown>,
-      publicKeyJwk: JSON.parse(await readFile(join(recordDir, "public-key.jwk.json"), "utf8")) as Record<string, unknown>,
-    };
-    return {
-      ...identity,
-      kind: profileFile.kind,
-      profile: profileFile.profile,
-    };
-  }
+  const identity = JSON.parse(await readFile(join(recordDir, "identity.json"), "utf8")) as OanIdentityFile;
   return {
     ...identity,
     kind: bucket === "nodes" ? "node" : bucket === "agents" ? "agent" : "subject",
@@ -255,7 +205,17 @@ async function loadRecord(
       capabilityTags: identity.didDocument.oanMetadata?.capabilityTags,
       authorizedDomains: identity.didDocument.oanMetadata?.authorizedDomains,
     },
+    privateKeyJwk: normalizeProfileV2Jwk(identity.privateKeyJwk),
+    publicKeyJwk: normalizeProfileV2Jwk(identity.publicKeyJwk),
   };
+}
+
+function normalizeProfileV2Jwk(value: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...value };
+  delete next.alg;
+  delete next.key_ops;
+  delete next.ext;
+  return next;
 }
 
 async function saveRecordBucket(
@@ -274,12 +234,9 @@ async function saveRecordBucket(
       did: record.did,
       verificationMethodId: record.verificationMethodId,
       didDocument: record.didDocument,
-      privateKeyJwk: record.privateKeyJwk,
-      publicKeyJwk: record.publicKeyJwk,
+      privateKeyJwk: normalizeProfileV2Jwk(record.privateKeyJwk),
+      publicKeyJwk: normalizeProfileV2Jwk(record.publicKeyJwk),
     } satisfies OanIdentityFile);
-    await writeJson(join(recordDir, "did-document.json"), record.didDocument);
-    await writeJson(join(recordDir, "private-key.jwk.json"), record.privateKeyJwk);
-    await writeJson(join(recordDir, "public-key.jwk.json"), record.publicKeyJwk);
   }
 }
 

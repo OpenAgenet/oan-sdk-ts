@@ -307,6 +307,13 @@ assert(
     oanVector.signatureInputCanonical,
   "DID document signature input vector mismatch",
 );
+assert(
+  !("creator" in oanVector.proof) &&
+    !("cryptoSuite" in oanVector.proof) &&
+    !("hashAlgorithm" in oanVector.proof) &&
+    !("cryptoSuite" in (oanVector.documentWithoutProof.verificationMethod as any[])[0]),
+  "DID proof fixture must not expose legacy proof algorithm fields",
+);
 const completeVectorDocument = {
   ...oanVector.documentWithoutProof,
   proof: oanVector.proof,

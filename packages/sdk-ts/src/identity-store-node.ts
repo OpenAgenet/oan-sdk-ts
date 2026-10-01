@@ -107,6 +107,7 @@ export async function createAgentIdentityNode(
     serviceEndpoint?: string;
     manifestUrl?: string;
     schemaUrl?: string;
+    registrarDid?: string;
   },
 ): Promise<{ record: OanIdentityRecord; snapshot: OanIdentityStoreSnapshot; identityDir: string }> {
   const identityDir = options.identityDir ?? getDefaultIdentityStoreDir();
@@ -122,6 +123,7 @@ export async function createAgentIdentityNode(
     serviceEndpoint: options.serviceEndpoint,
     manifestUrl: options.manifestUrl,
     schemaUrl: options.schemaUrl,
+    registrarDid: options.registrarDid,
   });
   const next = upsertIdentityRecord(snapshot, record);
   await saveIdentityStoreSnapshot(next, identityDir);

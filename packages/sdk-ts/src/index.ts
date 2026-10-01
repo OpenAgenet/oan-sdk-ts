@@ -182,7 +182,7 @@ export function createResourceDidDocumentDraft(options: ResourceDraftOptions): D
       {
         id: keyId,
         type: options.verificationMethodType ?? "Ed25519VerificationKey2020",
-        controller: options.controllerDid ?? options.publisherDid ?? normalizedDid,
+        controller: normalizedDid,
         publicKeyMultibase: options.publicKeyMultibase ?? "zReplaceWithPublicKey",
       },
     ],
@@ -210,10 +210,8 @@ export function createResourceDidDocumentDraft(options: ResourceDraftOptions): D
       packageInfo: {
         manifestUrl: options.manifestUrl,
         downloadUrl: options.downloadUrl,
-        schemaUrl: options.schemaUrl,
         packageHash,
         metadataHash: options.metadataHash,
-        hashAlgorithm,
         version,
         versionScheme: options.versionScheme ?? "semver",
       },

@@ -55,11 +55,8 @@ export interface VerificationMethod {
   id: string;
   type: string;
   controller: string;
-  cryptoSuite?: "Ed25519Sha256" | "Sm2Sm3" | "Ed25519Sha256Legacy" | string;
-  publicKeyFormat?: string;
   publicKeyMultibase?: string;
   publicKeyJwk?: Record<string, unknown>;
-  [key: string]: unknown;
 }
 
 export interface ServiceEndpoint {
@@ -121,22 +118,28 @@ export interface ImplementationLink {
 }
 
 export interface CredentialRequirement {
-  type: string;
-  issuerDid?: string;
-  purpose?: string;
-  [key: string]: unknown;
+  id: string;
+  purpose: string;
+  credentialType: string;
+  issuer?: string | string[];
+  scope?: Record<string, unknown>;
+  presentationMode?: string;
+  required: boolean;
 }
 
 export interface PackageInfo {
   manifestUrl?: string;
   downloadUrl?: string;
   packageHash?: string;
-  hashAlgorithm?: string;
+  metadataHash?: string;
   version?: string;
   versionScheme?: string;
   previousVersion?: string;
   rootProofRef?: string;
-  [key: string]: unknown;
+  releaseNotesUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  expiresAt?: string;
 }
 
 export interface DataIntegrityProof {
@@ -740,8 +743,6 @@ export interface OanInfrastructureAuthorizationCredentialSubject {
   endpoint?: string;
   authorizedDomains: string[];
   didDocumentHash: string;
-  governanceState: "active" | "suspended" | "revoked";
-  governanceBindingId: string;
 }
 
 export interface OanResourceRegistrationCredentialSubject {

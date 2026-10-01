@@ -56,6 +56,7 @@ export interface CreateIdentityOptions {
   resourceType: ResourceType;
   kind: OanIdentityKind;
   routingCode?: string;
+  registrarDid?: string;
   did?: string;
   ownerSubjectDid?: string;
   capabilityTags?: string[];
@@ -99,7 +100,11 @@ export function validateOanIdentityRecord(record: OanIdentityRecord): void {
       : Array.isArray(record.didDocument.controller)
         ? record.didDocument.controller
         : [];
-  if (!method || controllerDids.length === 0 || !controllerDids.includes(method.controller)) {
+  if (
+    !method ||
+    controllerDids.length === 0 ||
+    (method.controller !== record.did && !controllerDids.includes(method.controller))
+  ) {
     throw new Error("identity_verification_method_mismatch");
   }
   if (!record.didDocument.authentication?.includes(record.verificationMethodId)) {
@@ -135,14 +140,30 @@ export interface ControllerAuthorizationProofOptions {
   now?: Date;
 }
 
+export interface RegistrationProofOptions extends ControllerAuthorizationProofOptions {
+  resourceIdentity: OanIdentityRecord;
+}
 
 const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 export async function createOanIdentityRecord(
   options: CreateIdentityOptions,
 ): Promise<OanIdentityRecord> {
-  const routingCode = normalizeRoutingCode(options.routingCode ?? "K7mQ9");
+  const registrarRoutingCode = options.registrarDid
+    ? routingCodeFromDid(options.registrarDid)
+    : undefined;
+  if (options.routingCode && options.registrarDid) {
+    if (normalizeRoutingCode(options.routingCode) !== registrarRoutingCode) {
+      throw new Error("routing_code_registrar_mismatch");
+    }
+  }
+  const routingCode = normalizeRoutingCode(
+    options.routingCode ?? registrarRoutingCode ?? "K7mQ9",
+  );
   const did = options.did ?? createDidOan(options.resourceType, routingCode);
+  if (registrarRoutingCode && parseRoutingCodeFromDid(did) !== registrarRoutingCode) {
+    throw new Error("routing_code_registrar_mismatch");
+  }
   const keyPair = await generateEd25519JwkPair();
   const verificationMethodId = `${did}#key-1`;
   const didDocument = createResourceDidDocumentDraft({
@@ -165,10 +186,7 @@ export async function createOanIdentityRecord(
   if (Array.isArray(didDocument.verificationMethod) && didDocument.verificationMethod[0]) {
     didDocument.verificationMethod[0] = {
       ...didDocument.verificationMethod[0],
-      controller:
-        typeof didDocument.controller === "string"
-          ? didDocument.controller
-          : did,
+      controller: did,
       publicKeyJwk: keyPair.publicKeyJwk,
       publicKeyMultibase: undefined,
     };
@@ -346,6 +364,9 @@ export async function attachControllerAuthorizationProof(
   submission: ResourceRegistrationSubmission,
   options: ControllerAuthorizationProofOptions,
 ): Promise<ResourceRegistrationSubmission> {
+  if (parseRoutingCodeFromDid(submission.resourceDid) !== routingCodeFromDid(options.registrarDid)) {
+    throw new Error("routing_code_registrar_mismatch");
+  }
   if (!submission.didDocumentHash || !submission.metadataHash) {
     throw new Error("missing_hashes_for_controller_authorization");
   }
@@ -382,9 +403,12 @@ export async function attachControllerAuthorizationProof(
 
 export async function finalizeRegistrationSubmissionWithProof(
   submission: ResourceRegistrationSubmission,
-  options: ControllerAuthorizationProofOptions,
+  options: RegistrationProofOptions,
 ): Promise<ResourceRegistrationSubmission> {
-  const identity = options.controllerIdentity;
+  if (options.resourceIdentity.did !== submission.resourceDid) {
+    throw new Error("resource_identity_mismatch");
+  }
+  const identity = options.resourceIdentity;
   const hashAlgorithm = submission.hashAlgorithm || "sha256";
   submission.didDocument = await signDidDocumentProof(submission.didDocument, identity);
   submission.didDocumentHash = `${hashAlgorithm}:${await hashDidDocumentWithProof(submission.didDocument)}`;
@@ -396,14 +420,6 @@ export async function signDidDocumentProof(
   document: DidDocument,
   identity: OanIdentityRecord,
 ): Promise<DidDocument> {
-  if (
-    document.controller &&
-    (Array.isArray(document.controller)
-      ? !document.controller.includes(identity.did)
-      : document.controller !== identity.did)
-  ) {
-    throw new Error("did_document_controller_identity_mismatch");
-  }
   const methodId = identity.verificationMethodId;
   const { proof: _ignoredProof, ...documentWithoutProof } = document;
   const unsigned: DidDocument = {
@@ -429,6 +445,16 @@ export async function signDidDocumentProof(
 
 export function createDidOan(_resourceType: ResourceType, routingCode = "K7mQ9"): string {
   return `did:oan:${normalizeRoutingCode(routingCode)}:${randomBase58(32)}`;
+}
+
+function routingCodeFromDid(did: string): string {
+  return parseRoutingCodeFromDid(did, "invalid_registrar_did");
+}
+
+function parseRoutingCodeFromDid(did: string, errorCode = "invalid_did"): string {
+  const match = /^did:oan:([1-9A-HJ-NP-Za-km-z]{5}):/.exec(did);
+  if (!match) throw new Error(errorCode);
+  return match[1];
 }
 
 /** @deprecated Use normalizeRoutingCode. */

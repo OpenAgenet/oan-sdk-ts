@@ -116,7 +116,6 @@ function samplePackage(): ResourcePackage {
         packageInfo: {
           manifestUrl: "https://example.org/agent/manifest.json",
           packageHash: "sha256:package",
-          hashAlgorithm: "sha256",
           version: "1.0.0",
         },
       },
@@ -527,6 +526,7 @@ assert(
   "controller identity should be self-controlled",
 );
 const agentIdentity = await createAgentIdentity("SDK Test Skill", "skill", subjectIdentity.did, {
+  registrarDid: "did:oan:P9aBc:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
   description: "Generated identity-backed skill",
   capabilityTags: ["sdk.identity"],
   authorizedDomains: ["legal"],
@@ -537,8 +537,8 @@ assert(
   "resource identity should preserve an external controller",
 );
 assert(
-  agentIdentity.didDocument.verificationMethod?.[0]?.controller === subjectIdentity.did,
-  "resource verification method should be controlled by the external controller",
+  agentIdentity.didDocument.verificationMethod?.[0]?.controller === agentIdentity.did,
+  "resource verification method should be controlled by the resource DID",
 );
 validateOanIdentityRecord(agentIdentity);
 const signedDocument = await signDidDocumentProof(subjectIdentity.didDocument, subjectIdentity);
@@ -667,9 +667,14 @@ const finalizedIdentitySubmission = await finalizeRegistrationSubmissionWithProo
     metadataHash: "sha256:sdk-test-metadata",
   }),
   {
+    resourceIdentity: agentIdentity,
     controllerIdentity: subjectIdentity,
     registrarDid: "did:oan:P9aBc:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
   },
+);
+assert(
+  finalizedIdentitySubmission.didDocument.proof?.verificationMethod === `${agentIdentity.did}#key-1`,
+  "resource DID Document must be signed by the resource identity",
 );
 assert(
   /^sha256:[0-9a-f]{64}$/.test(finalizedIdentitySubmission.didDocumentHash ?? ""),
@@ -708,6 +713,47 @@ try {
   mismatchRejected = error instanceof Error && error.message === "controller_identity_mismatch";
 }
 assert(mismatchRejected, "controller DID mismatch should be rejected before signing");
+
+let routingMismatchRejected = false;
+try {
+  await createAgentIdentity("Mismatched routing", "skill", subjectIdentity.did, {
+    registrarDid: "did:oan:P9aBc:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+    routingCode: "K7mQ9",
+  });
+} catch (error) {
+  routingMismatchRejected = error instanceof Error && error.message === "routing_code_registrar_mismatch";
+}
+assert(routingMismatchRejected, "explicit routing-code must match registrar DID");
+
+let explicitDidRoutingMismatchRejected = false;
+try {
+  await createAgentIdentity("Mismatched explicit DID", "skill", subjectIdentity.did, {
+    registrarDid: "did:oan:P9aBc:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+    did: "did:oan:K7mQ9:DYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  });
+} catch (error) {
+  explicitDidRoutingMismatchRejected = error instanceof Error && error.message === "routing_code_registrar_mismatch";
+}
+assert(explicitDidRoutingMismatchRejected, "explicit DID routing-code must match registrar DID");
+
+let resourceIdentityMismatchRejected = false;
+try {
+  await finalizeRegistrationSubmissionWithProof(
+    createRegistrationSubmissionFromIdentity(agentIdentity, {
+      manifestUrl: "https://example.org/skills/sdk-test.json",
+      packageHash: "sha256:sdk-test-package",
+      metadataHash: "sha256:sdk-test-metadata",
+    }),
+    {
+      resourceIdentity: subjectIdentity,
+      controllerIdentity: subjectIdentity,
+      registrarDid: "did:oan:P9aBc:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+    },
+  );
+} catch (error) {
+  resourceIdentityMismatchRejected = error instanceof Error && error.message === "resource_identity_mismatch";
+}
+assert(resourceIdentityMismatchRejected, "resource signing identity must match resource DID");
 
 let identityStore = createEmptyIdentityStoreSnapshot();
 identityStore = upsertIdentityRecord(identityStore, subjectIdentity);

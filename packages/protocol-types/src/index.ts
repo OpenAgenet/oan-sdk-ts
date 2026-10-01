@@ -226,7 +226,6 @@ function didOanDefaultDocumentLoader(url: string) {
       documentUrl: url,
       document: {
         "@context": {
-          "@vocab": "https://openagenet.xyz/did-oan-specs#",
           id: "@id",
           type: "@type",
           controller: "https://w3id.org/security#controller",
@@ -246,6 +245,7 @@ function didOanDefaultDocumentLoader(url: string) {
       documentUrl: url,
       document: {
         "@context": {
+          "@vocab": "https://openagenet.xyz/did-oan-specs#",
           oanMetadata: "https://openagenet.xyz/did-oan-specs#oanMetadata",
         },
       },

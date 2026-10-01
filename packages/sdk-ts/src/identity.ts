@@ -448,7 +448,11 @@ export function createDidOan(_resourceType: ResourceType, routingCode = "K7mQ9")
 }
 
 function routingCodeFromDid(did: string): string {
-  return parseRoutingCodeFromDid(did, "invalid_registrar_did");
+  const parts = did.split(":");
+  if (parts.length !== 4 || parts[0] !== "did" || parts[1] !== "oan") {
+    throw new Error("invalid_registrar_did");
+  }
+  return parts[3].slice(0, 5);
 }
 
 function parseRoutingCodeFromDid(did: string, errorCode = "invalid_did"): string {
@@ -499,6 +503,13 @@ function sanitizeControllerDidDocument(record: OanIdentityRecord): DidDocument {
   didDocument.capabilityInvocation = didDocument.capabilityInvocation?.length
     ? didDocument.capabilityInvocation
     : [record.verificationMethodId];
+  didDocument.oanMetadata = {
+    ...(didDocument.oanMetadata ?? {}),
+    subjectType: "controller",
+    resourceType: "controller",
+    controllerDid: record.did,
+    authorizedDomains: didDocument.oanMetadata?.authorizedDomains ?? ["*"],
+  } as DidDocument["oanMetadata"];
   return removePrivateKeyMaterial(didDocument) as DidDocument;
 }
 

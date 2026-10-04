@@ -550,6 +550,21 @@ assert(signedDocument.proof?.proofValue.startsWith("z"), "DID proof must use Mul
 assert(new TextDecoder().decode(didDocumentSignatureInput(signedDocument)) === new TextDecoder().decode(didDocumentSignatureInput({ ...signedDocument, proof: undefined })), "DID signature input mismatch");
 const documentHash = await hashDidDocumentWithProof(signedDocument);
 assert(/^[0-9a-f]{64}$/.test(documentHash), "DID document hash format mismatch");
+for (const nativeId of ["devil109/n8n-workflows", "6747420043"]) {
+  const nativeIdDocument = structuredClone(subjectIdentity.didDocument);
+  nativeIdDocument.oanMetadata = {
+    ...(nativeIdDocument.oanMetadata as any),
+    externalIdentifiers: [{
+      id: nativeId,
+      resolutionServiceEndpoint: "https://example.org/resolve",
+    }],
+  };
+  const signedNativeIdDocument = await signDidDocumentProof(nativeIdDocument, subjectIdentity);
+  assert(
+    signedNativeIdDocument.proof?.proofValue.startsWith("z"),
+    `native external identifier ${nativeId} should be signable`,
+  );
+}
 const tamperedSignedDocument = {
   ...signedDocument,
   oanMetadata: {
@@ -581,13 +596,25 @@ assert(
 const externalIdDocument = createSkillDraft({
   resourceDid: "did:oan:K7mQ9:DYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
   name: "External ID Skill",
-  externalIdentifiers: [{ id: "urn:example:skill", resolutionServiceEndpoint: "https://resolver.example/skill" }],
+  externalIdentifiers: [{ id: "devil109/n8n-workflows", resolutionServiceEndpoint: "https://huggingface.co/spaces" }],
 });
-assert(getRegistrationExternalIdentifierIds(externalIdDocument)[0] === "urn:example:skill", "external identifier id missing");
+assert(
+  getRegistrationExternalIdentifierIds(externalIdDocument)[0] === "devil109/n8n-workflows",
+  "native external identifier id missing",
+);
 assert(
   JSON.stringify(buildRegistrationCredentialExternalIdentifiers(externalIdDocument)) ===
-    JSON.stringify([{ id: "urn:example:skill" }]),
+    JSON.stringify([{ id: "devil109/n8n-workflows" }]),
   "registration credential external identifiers must omit resolution endpoints",
+);
+const numericExternalIdDocument = createSkillDraft({
+  resourceDid: "did:oan:K7mQ9:EYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  name: "Numeric External ID Skill",
+  externalIdentifiers: [{ id: "6747420043", resolutionServiceEndpoint: "https://apps.example.org" }],
+});
+assert(
+  getRegistrationExternalIdentifierIds(numericExternalIdDocument)[0] === "6747420043",
+  "numeric native external identifier id missing",
 );
 const noExternalIdDocument = createSkillDraft({
   resourceDid: "did:oan:K7mQ9:EYpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",

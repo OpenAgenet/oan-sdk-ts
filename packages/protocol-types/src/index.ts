@@ -247,6 +247,19 @@ function didOanDefaultDocumentLoader(url: string) {
         "@context": {
           "@vocab": "https://openagenet.xyz/did-oan-specs#",
           oanMetadata: "https://openagenet.xyz/did-oan-specs#oanMetadata",
+          externalIdentifiers: {
+            "@id": "https://openagenet.xyz/did-oan-specs#externalIdentifiers",
+            "@context": {
+              id: {
+                "@id": "https://openagenet.xyz/did-oan-specs#externalIdentifierId",
+                "@type": "http://www.w3.org/2001/XMLSchema#string",
+              },
+              resolutionServiceEndpoint: {
+                "@id": "https://openagenet.xyz/did-oan-specs#resolutionServiceEndpoint",
+                "@type": "http://www.w3.org/2001/XMLSchema#string",
+              },
+            },
+          },
         },
       },
     };

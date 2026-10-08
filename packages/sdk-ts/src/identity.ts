@@ -413,6 +413,11 @@ export async function finalizeRegistrationSubmissionWithProof(
   submission.didDocument = await signDidDocumentProof(submission.didDocument, identity);
   submission.didDocumentHash = `${hashAlgorithm}:${await hashDidDocumentWithProof(submission.didDocument)}`;
   submission.packageHash = `${hashAlgorithm}:${await hashRegistrationPackageBinding(submission)}`;
+  const controllerDid = submission.didDocument.oanMetadata?.controllerDid ?? options.controllerIdentity.did;
+  if (controllerDid === submission.resourceDid) {
+    delete submission.controllerAuthorizationProof;
+    return submission;
+  }
   return attachControllerAuthorizationProof(submission, options);
 }
 

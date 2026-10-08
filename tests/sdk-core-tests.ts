@@ -717,6 +717,26 @@ assert(
     `sha256:${await hashRegistrationPackageBinding(finalizedIdentitySubmission)}`,
   "finalized submission packageHash should bind final didDocumentHash",
 );
+const selfControllerIdentity = await createAgentIdentity("Self Controlled Skill", "skill", undefined, {
+  registrarDid: "did:oan:P9aBc:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  manifestUrl: "https://example.org/skills/self-controlled.json",
+});
+const selfControllerSubmission = await finalizeRegistrationSubmissionWithProof(
+  createRegistrationSubmissionFromIdentity(selfControllerIdentity, {
+    manifestUrl: "https://example.org/skills/self-controlled.json",
+    packageHash: "sha256:self-controller-package",
+    metadataHash: "sha256:self-controller-metadata",
+  }),
+  {
+    resourceIdentity: selfControllerIdentity,
+    controllerIdentity: selfControllerIdentity,
+    registrarDid: "did:oan:P9aBc:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  },
+);
+assert(
+  !selfControllerSubmission.controllerAuthorizationProof,
+  "self-controller submission must not attach external controllerAuthorizationProof",
+);
 const mismatchedSubmission = createRegistrationSubmissionFromIdentity(agentIdentity, {
   manifestUrl: "https://example.org/skills/sdk-test.json",
   packageHash: "sha256:sdk-test-package",

@@ -194,7 +194,9 @@ export function createResourceDidDocumentDraft(options: ResourceDraftOptions): D
     oanMetadata: {
       subjectType: options.resourceType,
       resourceType: options.resourceType,
-      externalIdentifiers: options.externalIdentifiers,
+      ...(options.externalIdentifiers !== undefined
+        ? { externalIdentifiers: options.externalIdentifiers }
+        : {}),
       publisherDid: options.publisherDid,
       controllerDid: options.controllerDid ?? options.publisherDid ?? normalizedDid,
       resourceDescription: {

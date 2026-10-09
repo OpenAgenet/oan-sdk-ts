@@ -15,6 +15,7 @@ import {
   createDefaultSubjectIdentity,
   createEmptyIdentityStoreSnapshot,
   createMcpServerDraft,
+  createResourceDidDocumentDraft,
   createRegistrationSubmissionFromIdentity,
   createSkillDraft,
   createToolApiDraft,
@@ -516,6 +517,15 @@ assert(lifecycleSummary.warnings.some((item) => item.includes("published-to-cdn"
 
 const subjectIdentity = await createDefaultSubjectIdentity("SDK Test Subject");
 const controllerIdentity = await createControllerIdentity("External Controller");
+const defaultResourceDraft = createResourceDidDocumentDraft({
+  resourceDid: "did:oan:K7mQ9:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  resourceType: "skill",
+  name: "Default external identifier behavior",
+});
+assert(
+  !Object.prototype.hasOwnProperty.call(defaultResourceDraft.oanMetadata ?? {}, "externalIdentifiers"),
+  "default resource DID Documents should omit externalIdentifiers",
+);
 const sdkExternalIdentifiers = [
   {
     id: "devil109/n8n-workflows",

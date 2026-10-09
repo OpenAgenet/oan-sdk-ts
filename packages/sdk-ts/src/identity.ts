@@ -7,6 +7,7 @@ import type {
   ControllerAuthorizationProofBundle,
   DataIntegrityProof,
   DidDocument,
+  ExternalIdentifier,
   ResourceRegistrationSubmission,
   ResourceType,
 } from "../../protocol-types/src/index.js";
@@ -67,6 +68,7 @@ export interface CreateIdentityOptions {
   protocol?: string;
   manifestUrl?: string;
   schemaUrl?: string;
+  externalIdentifiers?: ExternalIdentifier[];
   verificationMethodType?: string;
   origin?: "generated" | "legacy-genesis-import";
   metadata?: Record<string, unknown>;
@@ -84,6 +86,7 @@ export interface RegistrationMaterialOptions {
   protocol?: string;
   capabilityTags?: string[];
   authorizedDomains?: string[];
+  externalIdentifiers?: ExternalIdentifier[];
   description?: string;
   packageInfo?: Record<string, unknown>;
 }
@@ -178,6 +181,7 @@ export async function createOanIdentityRecord(
     protocol: options.protocol,
     manifestUrl: options.manifestUrl,
     schemaUrl: options.schemaUrl,
+    externalIdentifiers: options.externalIdentifiers,
     controllerDid: options.ownerSubjectDid,
     publisherDid: options.ownerSubjectDid,
     verificationMethodType: options.verificationMethodType,
@@ -315,6 +319,8 @@ export function createRegistrationSubmissionFromIdentity(
     options.authorizedDomains ??
     record.profile.authorizedDomains ??
     (record.didDocument.oanMetadata?.authorizedDomains as string[] | undefined);
+  const externalIdentifiers =
+    options.externalIdentifiers ?? record.didDocument.oanMetadata?.externalIdentifiers;
   const draft = createResourceDidDocumentDraft({
     resourceDid: record.did,
     resourceType: record.profile.resourceType,
@@ -329,6 +335,7 @@ export function createRegistrationSubmissionFromIdentity(
     schemaUrl: options.schemaUrl,
     serviceType: options.serviceType,
     protocol: options.protocol,
+    externalIdentifiers,
     controllerDid: record.profile.ownerSubjectDid,
     publisherDid: record.profile.ownerSubjectDid,
     verificationMethodType:

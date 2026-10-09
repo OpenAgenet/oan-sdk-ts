@@ -516,6 +516,16 @@ assert(lifecycleSummary.warnings.some((item) => item.includes("published-to-cdn"
 
 const subjectIdentity = await createDefaultSubjectIdentity("SDK Test Subject");
 const controllerIdentity = await createControllerIdentity("External Controller");
+const sdkExternalIdentifiers = [
+  {
+    id: "devil109/n8n-workflows",
+    resolutionServiceEndpoint: "https://huggingface.co/spaces",
+  },
+  {
+    id: "6747420043",
+    resolutionServiceEndpoint: "https://apps.example.org",
+  },
+];
 assert(
   controllerIdentity.didDocument.oanMetadata?.subjectType === "controller" &&
     controllerIdentity.didDocument.oanMetadata?.resourceType === "controller",
@@ -531,6 +541,7 @@ const agentIdentity = await createAgentIdentity("SDK Test Skill", "skill", subje
   capabilityTags: ["sdk.identity"],
   authorizedDomains: ["legal"],
   manifestUrl: "https://example.org/skills/sdk-test.json",
+  externalIdentifiers: sdkExternalIdentifiers,
 });
 assert(
   agentIdentity.didDocument.controller === subjectIdentity.did,
@@ -539,6 +550,11 @@ assert(
 assert(
   agentIdentity.didDocument.verificationMethod?.[0]?.controller === agentIdentity.did,
   "resource verification method should be controlled by the resource DID",
+);
+assert(
+  JSON.stringify(agentIdentity.didDocument.oanMetadata?.externalIdentifiers) ===
+    JSON.stringify(sdkExternalIdentifiers),
+  "resource identity should preserve external identifiers",
 );
 validateOanIdentityRecord(agentIdentity);
 const signedDocument = await signDidDocumentProof(subjectIdentity.didDocument, subjectIdentity);
@@ -644,6 +660,11 @@ assert(
   identitySubmission.didDocument.oanMetadata?.authorizedDomains?.[0] === "legal",
   "identity-backed submission authorized domain mismatch",
 );
+assert(
+  JSON.stringify(identitySubmission.didDocument.oanMetadata?.externalIdentifiers) ===
+    JSON.stringify(sdkExternalIdentifiers),
+  "identity-backed submission should preserve external identifiers from identity",
+);
 assert(identitySubmission.didDocument.verificationMethod?.[0]?.publicKeyJwk, "identity-backed draft should carry publicKeyJwk");
 assert(
   !("cryptoSuite" in (identitySubmission.didDocument.verificationMethod?.[0] ?? {})),
@@ -692,6 +713,12 @@ const finalizedIdentitySubmission = await finalizeRegistrationSubmissionWithProo
     manifestUrl: "https://example.org/skills/sdk-test.json",
     packageHash: "sha256:sdk-test-package",
     metadataHash: "sha256:sdk-test-metadata",
+    externalIdentifiers: [
+      {
+        id: "override-platform-id",
+        resolutionServiceEndpoint: "https://override.example.org",
+      },
+    ],
   }),
   {
     resourceIdentity: agentIdentity,
@@ -702,6 +729,23 @@ const finalizedIdentitySubmission = await finalizeRegistrationSubmissionWithProo
 assert(
   finalizedIdentitySubmission.didDocument.proof?.verificationMethod === `${agentIdentity.did}#key-1`,
   "resource DID Document must be signed by the resource identity",
+);
+assert(
+  finalizedIdentitySubmission.didDocument.oanMetadata?.externalIdentifiers?.[0]?.id === "override-platform-id",
+  "explicit submission external identifiers should override identity defaults",
+);
+assert(
+  finalizedIdentitySubmission.didDocument.oanMetadata?.externalIdentifiers?.[0]?.resolutionServiceEndpoint ===
+    "https://override.example.org",
+  "explicit submission external identifier resolution endpoint should be preserved",
+);
+const clearedExternalIdentifierSubmission = createRegistrationSubmissionFromIdentity(agentIdentity, {
+  manifestUrl: "https://example.org/skills/sdk-test.json",
+  externalIdentifiers: [],
+});
+assert(
+  clearedExternalIdentifierSubmission.didDocument.oanMetadata?.externalIdentifiers?.length === 0,
+  "explicit empty external identifiers should clear identity defaults for a submission",
 );
 assert(
   /^sha256:[0-9a-f]{64}$/.test(finalizedIdentitySubmission.didDocumentHash ?? ""),

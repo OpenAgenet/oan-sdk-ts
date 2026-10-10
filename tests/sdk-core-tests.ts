@@ -49,7 +49,7 @@ import {
   signDidDocumentProof,
   verifyResourcePackageShape,
 } from "../packages/sdk-ts/src/index.js";
-import type { ResourceDiscoveryCandidate, ResourcePackage } from "../packages/protocol-types/src/index.js";
+import type { DidDocument, ResourceDiscoveryCandidate, ResourcePackage } from "../packages/protocol-types/src/index.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 

@@ -658,7 +658,19 @@ export function didDocumentSignatureInput(document: DidDocument): Uint8Array {
 }
 
 export async function hashDidDocumentWithProof(document: DidDocument): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonicalJson(document)));
+  const hashDocument = JSON.parse(JSON.stringify(document)) as DidDocument;
+  const resourceDescription = hashDocument.oanMetadata?.resourceDescription as
+    | Record<string, unknown>
+    | undefined;
+  if (resourceDescription) {
+    delete resourceDescription.useCases;
+    delete resourceDescription.inputs;
+    delete resourceDescription.outputs;
+  }
+  const digest = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(canonicalJson(hashDocument)),
+  );
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 

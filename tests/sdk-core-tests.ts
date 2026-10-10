@@ -740,6 +740,53 @@ assert(
   finalizedIdentitySubmission.didDocument.proof?.verificationMethod === `${agentIdentity.did}#key-1`,
   "resource DID Document must be signed by the resource identity",
 );
+const hashProjectionDocument = JSON.parse(JSON.stringify(finalizedIdentitySubmission.didDocument)) as DidDocument;
+delete (hashProjectionDocument.oanMetadata?.resourceDescription as Record<string, unknown> | undefined)?.useCases;
+delete (hashProjectionDocument.oanMetadata?.resourceDescription as Record<string, unknown> | undefined)?.inputs;
+delete (hashProjectionDocument.oanMetadata?.resourceDescription as Record<string, unknown> | undefined)?.outputs;
+assert(
+  finalizedIdentitySubmission.didDocumentHash ===
+    `sha256:${await hashDidDocumentWithProof(hashProjectionDocument)}`,
+  "DID document hash must use the registrar wire serialization projection",
+);
+assert(
+  finalizedIdentitySubmission.subjectControlProof?.challenge.subjectDid === agentIdentity.did,
+  "finalized submission must bind subject control proof to the resource DID",
+);
+assert(
+  finalizedIdentitySubmission.subjectControlProof?.challenge.didDocumentHash ===
+    finalizedIdentitySubmission.didDocumentHash,
+  "subject control proof must bind the finalized DID document hash",
+);
+assert(
+  finalizedIdentitySubmission.subjectControlProof?.challenge.registrarDid ===
+    "did:oan:P9aBc:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  "subject control proof must bind the registrar DID",
+);
+assert(
+  finalizedIdentitySubmission.subjectControlProof?.challenge.purpose === "resource-registration",
+  "subject control proof must use the registration purpose",
+);
+assert(
+  finalizedIdentitySubmission.subjectControlProof?.proof.verificationMethod ===
+    `${agentIdentity.did}#key-1`,
+  "subject control proof must be signed by the resource identity",
+);
+const subjectProof = finalizedIdentitySubmission.subjectControlProof!;
+const subjectSignature = base58MultibaseToBytes(subjectProof.proof.proofValue);
+const subjectVerified = await globalThis.crypto.subtle.verify(
+  { name: "Ed25519" },
+  await globalThis.crypto.subtle.importKey(
+    "jwk",
+    agentIdentity.publicKeyJwk as JsonWebKey,
+    { name: "Ed25519" },
+    false,
+    ["verify"],
+  ),
+  subjectSignature.buffer as ArrayBuffer,
+  new TextEncoder().encode(testCanonicalJson(subjectProof.challenge)),
+);
+assert(subjectVerified, "subject control proof signature should verify");
 assert(
   finalizedIdentitySubmission.didDocument.oanMetadata?.externalIdentifiers?.[0]?.id === "override-platform-id",
   "explicit submission external identifiers should override identity defaults",
@@ -790,6 +837,11 @@ const selfControllerSubmission = await finalizeRegistrationSubmissionWithProof(
 assert(
   !selfControllerSubmission.controllerAuthorizationProof,
   "self-controller submission must not attach external controllerAuthorizationProof",
+);
+assert(
+  !!selfControllerSubmission.subjectControlProof &&
+    selfControllerSubmission.subjectControlProof.challenge.subjectDid === selfControllerIdentity.did,
+  "self-controller submission must include subject control proof",
 );
 const mismatchedSubmission = createRegistrationSubmissionFromIdentity(agentIdentity, {
   manifestUrl: "https://example.org/skills/sdk-test.json",

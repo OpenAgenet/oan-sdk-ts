@@ -6,10 +6,12 @@
 import type {
   ControllerAuthorizationProofBundle,
   DataIntegrityProof,
+  DidControlChallenge,
   DidDocument,
   ExternalIdentifier,
   ResourceRegistrationSubmission,
   ResourceType,
+  SubjectControlProofBundle,
 } from "../../protocol-types/src/index.js";
 import { encode as base58Encode } from "base58-universal";
 import { createResourceDidDocumentDraft } from "./index.js";
@@ -419,6 +421,32 @@ export async function finalizeRegistrationSubmissionWithProof(
   const hashAlgorithm = submission.hashAlgorithm || "sha256";
   submission.didDocument = await signDidDocumentProof(submission.didDocument, identity);
   submission.didDocumentHash = `${hashAlgorithm}:${await hashDidDocumentWithProof(submission.didDocument)}`;
+  const now = options.now ?? new Date();
+  const verificationMethod = identity.verificationMethodId || `${identity.did}#key-1`;
+  const subjectChallenge: DidControlChallenge = {
+    challengeId: `subject-control-${now.getTime().toString(36)}-${randomBase58(8)}`,
+    draftId: `resource-draft-${now.getTime().toString(36)}-${randomBase58(8)}`,
+    subjectDid: submission.resourceDid,
+    didDocumentHash: submission.didDocumentHash,
+    registrarDid: options.registrarDid,
+    purpose: "resource-registration",
+    verificationMethod,
+    nonce: randomBase58(24),
+    issuedAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + (options.ttlMs ?? 5 * 60 * 1000)).toISOString(),
+  };
+  const subjectProof = await signDataIntegrityProof(
+    subjectChallenge,
+    identity,
+    "assertionMethod",
+  );
+  const subjectControlProof: SubjectControlProofBundle = {
+    challenge: subjectChallenge,
+    proof: subjectProof,
+    verifiedAt: now.toISOString(),
+    verifiedVerificationMethod: verificationMethod,
+  };
+  submission.subjectControlProof = subjectControlProof;
   submission.packageHash = `${hashAlgorithm}:${await hashRegistrationPackageBinding(submission)}`;
   const controllerDid = submission.didDocument.oanMetadata?.controllerDid ?? options.controllerIdentity.did;
   if (controllerDid === submission.resourceDid) {

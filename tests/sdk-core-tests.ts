@@ -867,6 +867,44 @@ try {
 }
 assert(mismatchRejected, "controller DID mismatch should be rejected before signing");
 
+const missingExternalControllerMetadata = createRegistrationSubmissionFromIdentity(agentIdentity, {
+  manifestUrl: "https://example.org/skills/sdk-test.json",
+  packageHash: "sha256:sdk-test-package",
+  metadataHash: "sha256:sdk-test-metadata",
+});
+missingExternalControllerMetadata.didDocument.controller = subjectIdentity.did;
+delete missingExternalControllerMetadata.didDocument.oanMetadata?.controllerDid;
+let missingExternalControllerRejected = false;
+try {
+  await finalizeRegistrationSubmissionWithProof(missingExternalControllerMetadata, {
+    resourceIdentity: agentIdentity,
+    controllerIdentity: subjectIdentity,
+    registrarDid: "did:oan:P9aBc:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  });
+} catch (error) {
+  missingExternalControllerRejected = error instanceof Error && error.message === "external_controller_metadata_required";
+}
+assert(missingExternalControllerRejected, "external controller without controllerDid must be rejected before signing");
+
+const multiControllerSubmission = createRegistrationSubmissionFromIdentity(agentIdentity, {
+  manifestUrl: "https://example.org/skills/sdk-test.json",
+  packageHash: "sha256:sdk-test-package",
+  metadataHash: "sha256:sdk-test-metadata",
+});
+multiControllerSubmission.didDocument.controller = [subjectIdentity.did, controllerIdentity.did];
+multiControllerSubmission.didDocument.oanMetadata!.controllerDid = subjectIdentity.did;
+let multiControllerRejected = false;
+try {
+  await finalizeRegistrationSubmissionWithProof(multiControllerSubmission, {
+    resourceIdentity: agentIdentity,
+    controllerIdentity: subjectIdentity,
+    registrarDid: "did:oan:P9aBc:7YpQm9Kx2VnRb6Ts3WfHa4Cd5Ej8LgNz",
+  });
+} catch (error) {
+  multiControllerRejected = error instanceof Error && error.message === "invalid_controller_declaration";
+}
+assert(multiControllerRejected, "multiple controllers must be rejected before signing");
+
 let routingMismatchRejected = false;
 try {
   await createAgentIdentity("Mismatched routing", "skill", subjectIdentity.did, {

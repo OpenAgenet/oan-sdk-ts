@@ -323,6 +323,18 @@ export function createRegistrationSubmissionFromIdentity(
     (record.didDocument.oanMetadata?.authorizedDomains as string[] | undefined);
   const externalIdentifiers =
     options.externalIdentifiers ?? record.didDocument.oanMetadata?.externalIdentifiers;
+  const declaredController = record.didDocument.controller;
+  const declaredControllerDid =
+    typeof declaredController === "string"
+      ? declaredController
+      : Array.isArray(declaredController) && declaredController.length === 1
+        ? declaredController[0]
+        : undefined;
+  const controllerDid =
+    record.didDocument.oanMetadata?.controllerDid ??
+    record.profile.ownerSubjectDid ??
+    declaredControllerDid ??
+    record.did;
   const draft = createResourceDidDocumentDraft({
     resourceDid: record.did,
     resourceType: record.profile.resourceType,
@@ -338,7 +350,7 @@ export function createRegistrationSubmissionFromIdentity(
     serviceType: options.serviceType,
     protocol: options.protocol,
     externalIdentifiers,
-    controllerDid: record.profile.ownerSubjectDid,
+    controllerDid,
     publisherDid: record.profile.ownerSubjectDid,
     verificationMethodType:
       typeof record.didDocument.verificationMethod?.[0]?.type === "string"
@@ -379,7 +391,18 @@ export async function attachControllerAuthorizationProof(
   if (!submission.didDocumentHash || !submission.metadataHash) {
     throw new Error("missing_hashes_for_controller_authorization");
   }
-  const controllerDid = submission.didDocument.oanMetadata?.controllerDid ?? options.controllerIdentity.did;
+  const declaredController = submission.didDocument.controller;
+  const declaredControllerDid =
+    typeof declaredController === "string"
+      ? declaredController
+      : Array.isArray(declaredController) && declaredController.length === 1
+        ? declaredController[0]
+        : undefined;
+  if (!declaredControllerDid) throw new Error("invalid_controller_declaration");
+  const controllerDid = submission.didDocument.oanMetadata?.controllerDid;
+  if (!controllerDid) throw new Error("external_controller_metadata_required");
+  if (controllerDid !== options.controllerIdentity.did) throw new Error("controller_identity_mismatch");
+  if (declaredControllerDid !== controllerDid) throw new Error("controller_declaration_mismatch");
   if (controllerDid !== options.controllerIdentity.did) {
     throw new Error("controller_identity_mismatch");
   }
@@ -418,6 +441,25 @@ export async function finalizeRegistrationSubmissionWithProof(
     throw new Error("resource_identity_mismatch");
   }
   const identity = options.resourceIdentity;
+  const declaredController = submission.didDocument.controller;
+  const declaredControllerDid =
+    typeof declaredController === "string"
+      ? declaredController
+      : Array.isArray(declaredController) && declaredController.length === 1
+        ? declaredController[0]
+        : undefined;
+  if (!declaredControllerDid) throw new Error("invalid_controller_declaration");
+  const metadataControllerDid = submission.didDocument.oanMetadata?.controllerDid;
+  const externalController = declaredControllerDid !== submission.resourceDid;
+  if (externalController && !metadataControllerDid) {
+    throw new Error("external_controller_metadata_required");
+  }
+  if (metadataControllerDid && metadataControllerDid !== declaredControllerDid) {
+    throw new Error("controller_declaration_mismatch");
+  }
+  if (externalController && metadataControllerDid !== options.controllerIdentity.did) {
+    throw new Error("controller_identity_mismatch");
+  }
   const hashAlgorithm = submission.hashAlgorithm || "sha256";
   submission.didDocument = await signDidDocumentProof(submission.didDocument, identity);
   submission.didDocumentHash = `${hashAlgorithm}:${await hashDidDocumentWithProof(submission.didDocument)}`;

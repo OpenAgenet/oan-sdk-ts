@@ -9,6 +9,9 @@ import { Ed25519VerificationKey2020 } from "@digitalbazaar/ed25519-verification-
 import { documentLoader as ed25519DocumentLoader } from "ed25519-signature-2020-context";
 import { encode as base58Encode } from "base58-universal";
 import { decode as base64urlDecode } from "base64url-universal";
+import { asDataIntegritySigner, type OanSigner } from "./signer.js";
+
+export * from "./identity-runtime.js";
 
 export type SubjectType =
   | "agent_instance" | "agent_product" | "agent_service" | "skill" | "mcp_server" | "tool_api"
@@ -204,6 +207,8 @@ export type DidOanDocumentLoader = (url: string) => Promise<{
 export interface DidOanDataIntegrityOptions {
   created?: string;
   documentLoader?: DidOanDocumentLoader;
+  /** Trusted signer injection; no private JWK is needed when supplied. */
+  signer?: OanSigner;
 }
 
 function rejectDidOanUnknownFields(
@@ -219,7 +224,7 @@ function rejectDidOanUnknownFields(
 
 const didOanPurposes = (jsigs as { purposes: { AssertionProofPurpose: new () => unknown } }).purposes;
 
-function didOanDefaultDocumentLoader(url: string) {
+export function didOanDefaultDocumentLoader(url: string) {
   if (url === "https://www.w3.org/ns/did/v1") {
     return {
       contextUrl: null,
@@ -299,12 +304,15 @@ export async function signDidOanDataIntegrity(
   privateKeyJwk: unknown,
   options: DidOanDataIntegrityOptions = {},
 ): Promise<Record<string, unknown>> {
-  const privateJwk = parseDidOanJwk(privateKeyJwk, true);
-  const key = await didOanKeyFromJwk(did, privateJwk, true);
+  const injectedSigner = options.signer
+    ? await asDataIntegritySigner(options.signer, `${did}#key-1`)
+    : undefined;
+  const key = injectedSigner ? undefined : await didOanKeyFromJwk(did, parseDidOanJwk(privateKeyJwk, true), true);
   const purpose = new didOanPurposes.AssertionProofPurpose();
   const signed = await (jsigs as any).sign(document, {
     suite: new Ed25519Signature2020({
       key,
+      ...(injectedSigner ? { signer: injectedSigner } : {}),
       ...(options.created ? { proof: { created: options.created } } : {}),
     }),
     purpose,

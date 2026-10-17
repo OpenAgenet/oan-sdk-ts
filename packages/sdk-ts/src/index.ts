@@ -766,3 +766,5 @@ function uniqueStrings(values: string[]): string[] {
 
 export * from "./did-oan.js";
 export * from "./identity.js";
+export * from "./signer.js";
+export * from "./verification.js";

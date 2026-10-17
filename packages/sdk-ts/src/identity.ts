@@ -17,6 +17,7 @@ import { encode as base58Encode } from "base58-universal";
 import { createResourceDidDocumentDraft } from "./index.js";
 import { hashDidDocumentWithProof, hashRegistrationPackageBinding } from "./index.js";
 import { signDidOanDataIntegrity } from "../../protocol-types/src/index.js";
+import type { OanSigner } from "./signer.js";
 
 export type OanIdentityKind = "subject" | "agent" | "node";
 
@@ -500,8 +501,16 @@ export async function finalizeRegistrationSubmissionWithProof(
 
 export async function signDidDocumentProof(
   document: DidDocument,
-  identity: OanIdentityRecord,
+  identity: Pick<OanIdentityRecord, "did" | "verificationMethodId" | "publicKeyJwk"> & Partial<Pick<OanIdentityRecord, "privateKeyJwk">>,
+  options: { signer?: OanSigner } = {},
 ): Promise<DidDocument> {
+  if (document.id !== identity.did) throw new Error("identity_did_document_mismatch");
+  if (options.signer) {
+    const publicKey = await options.signer.publicKey();
+    if (publicKey.x !== identity.publicKeyJwk.x || publicKey.crv !== identity.publicKeyJwk.crv || publicKey.kty !== identity.publicKeyJwk.kty) {
+      throw new Error("identity_signer_public_key_mismatch");
+    }
+  }
   const methodId = identity.verificationMethodId;
   const { proof: _ignoredProof, ...documentWithoutProof } = document;
   const unsigned: DidDocument = {
@@ -522,6 +531,7 @@ export async function signDidDocumentProof(
     unsigned as Record<string, unknown>,
     identity.did,
     identity.privateKeyJwk,
+    options,
   ) as DidDocument;
 }
 

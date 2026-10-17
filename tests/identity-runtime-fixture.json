@@ -1,0 +1,14 @@
+{
+  "profile": "oan-message-v1",
+  "senderDid": "did:oan:K7mQ9:11111111111111111111111111111111",
+  "audienceDid": "did:oan:K7mQ9:22222222222222222222222222222222",
+  "purpose": "request",
+  "protocol": "http",
+  "sessionId": "fixture-session",
+  "messageId": "fixture-message",
+  "requestId": "fixture-request",
+  "createdAt": "2026-10-16T00:00:00.000Z",
+  "expiresAt": "2026-10-16T00:01:00.000Z",
+  "nonce": "fixture-nonce",
+  "payloadDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+}

@@ -35,7 +35,17 @@ export interface IdentityEvidencePolicy {
  * Optional private credentials are never returned in the report.
  */
 export async function verifyIdentityEvidence(input: IdentityEvidenceInput, policy: IdentityEvidencePolicy): Promise<IdentityVerificationReport> {
-  try { return await inspectIdentityEvidence(input, policy); }
+  try {
+    // Snapshot before the first await; callers cannot change the evidence or trust policy mid-check.
+    const {registrar, ...rest} = policy;
+    const pinned: IdentityEvidencePolicy = structuredClone({...rest, registrar: undefined});
+    if (registrar) {
+      const {documentLoader, ...config} = registrar;
+      pinned.registrar = {...structuredClone(config), documentLoader};
+    }
+    assertBoundedEvidence(input);
+    return await inspectIdentityEvidence(structuredClone(input), pinned);
+  }
   catch { return {valid:false,checks:[{name:'registrationTrust',status:'failed',code:'invalid_identity_evidence'}]}; }
 }
 
@@ -69,7 +79,7 @@ async function inspectIdentityEvidence(input: IdentityEvidenceInput, policy: Ide
       && canonicalJson(document) === canonicalJson(pkg.didDocument);
     add('documentBinding', bound ? 'passed' : 'failed', bound ? undefined : 'document_binding_mismatch');
     const observed = Date.parse(policy.observedAt), now = policy.now ?? Date.now();
-    const fresh = Number.isFinite(observed) && Number.isFinite(policy.maxAgeMs) && policy.maxAgeMs > 0
+    const fresh = Number.isFinite(now) && Number.isFinite(observed) && Number.isFinite(policy.maxAgeMs) && policy.maxAgeMs > 0
       && observed <= now + 30000 && observed + policy.maxAgeMs > now;
     add('freshness', fresh ? 'passed' : 'failed', fresh ? undefined : 'evidence_freshness_unknown');
     const active = pkg.metadata?.lifecycleState === 'active';
@@ -103,6 +113,7 @@ async function inspectIdentityEvidence(input: IdentityEvidenceInput, policy: Ide
       if (policy.registrar.proofProfile === 'data-integrity') {
         await verifyDidOanDataIntegrity(vc, policy.registrar.publicKeyJwk, {documentLoader: policy.registrar.documentLoader});
       } else {
+        if (policy.registrar.proofProfile !== undefined && policy.registrar.proofProfile !== 'registrar-canonical-v1') throw new Error();
         // Current Registrar sign_credential signs canonical unsigned JSON (not a JSON-LD proof).
         const unsigned = structuredClone(vc); delete unsigned.proof;
         const jwk = policy.registrar.publicKeyJwk as JsonWebKey;
@@ -120,6 +131,25 @@ async function inspectIdentityEvidence(input: IdentityEvidenceInput, policy: Ide
   return {valid: !checks.some(c => c.status === 'failed') && required.every(name => checks.some(c => c.name === name && c.status === 'passed')), checks};
 }
 
+/** Public verification accepts bounded JSON, never remote context fetches or private key material. */
+function assertBoundedEvidence(input: unknown): void {
+  const pending = [{value: input, depth: 0}];
+  let nodes = 0, size = 0;
+  while (pending.length) {
+    const {value, depth} = pending.pop()!;
+    if (++nodes > 20000 || depth > 32) throw new Error('invalid_identity_evidence');
+    if (typeof value === 'string') size += value.length;
+    else if (value && typeof value === 'object') {
+      for (const [key, item] of Object.entries(value)) {
+        if (/^(privateKey.*|secretKey|seed)$/i.test(key) || (key === 'd' && 'kty' in value)) throw new Error('invalid_identity_evidence');
+        size += key.length;
+        pending.push({value: item, depth: depth + 1});
+      }
+    }
+    if (size > 1_000_000) throw new Error('invalid_identity_evidence');
+  }
+}
+
 /** Public package path: pinned Root claims authenticate the document/key binding.
  * This does not establish latest chain governance, private VC attributes or real-time revocation.
  * observedAt is supplied by the trusted fetch/cache host, never by the remote peer.
@@ -129,10 +159,12 @@ export async function verifyPinnedRootPackage(input: {
   observedAt: string; maxAgeMs: number; now?: number;
 }): Promise<{ document: DidDocument; verificationMethod: string; publicKeyJwk: JsonWebKey;
   packageHash: string; validUntil: number; checks: Record<string, string> }> {
-  const { resourcePackage: supplied, expectedDid, anchor, observedAt, maxAgeMs } = input;
+  assertBoundedEvidence(input);
+  const { resourcePackage: supplied, expectedDid, anchor, observedAt, maxAgeMs, now: suppliedNow } = structuredClone(input);
+  assertBoundedEvidence(supplied);
   const pkg = structuredClone(supplied);
-  const now = input.now ?? Date.now(), observed = Date.parse(observedAt);
-  if (!Number.isFinite(observed) || !Number.isFinite(maxAgeMs) || maxAgeMs <= 0 || observed > now + 30000 || observed + maxAgeMs <= now) throw new Error("evidence_freshness_unknown");
+  const now = suppliedNow ?? Date.now(), observed = Date.parse(observedAt);
+  if (!Number.isFinite(now) || !Number.isFinite(observed) || !Number.isFinite(maxAgeMs) || maxAgeMs <= 0 || observed > now + 30000 || observed + maxAgeMs <= now) throw new Error("evidence_freshness_unknown");
   if (!pkg || pkg.resourceDid !== expectedDid || pkg.didDocument?.id !== expectedDid || typeof pkg.hashAlgorithm !== 'string' || pkg.hashAlgorithm.toLowerCase() !== "sha256") throw new Error("resource_package_binding_mismatch");
   verifyResourcePackageShape(pkg);
   if (pkg.metadata.lifecycleState !== "active") throw new Error("resource_lifecycle_not_active");

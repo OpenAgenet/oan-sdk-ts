@@ -1,3 +1,8 @@
+// Copyright (c) 2026 OpenAgenet contributors
+//
+// Initial author: JINLIANG XU
+// Email: jlxufly@gmail.com
+
 import { verifyDidOanDataIntegrity, type DidDocument, type DidOanDocumentLoader, type IdentityVerificationReport } from "../../protocol-types/src/index.js";
 
 /** Verify document proof against a pinned public key. Registration trust is separate. */

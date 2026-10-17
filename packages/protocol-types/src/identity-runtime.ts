@@ -1,3 +1,8 @@
+// Copyright (c) 2026 OpenAgenet contributors
+//
+// Initial author: JINLIANG XU
+// Email: jlxufly@gmail.com
+
 /** Experimental edge identity context, carried inside existing signed envelopes.
  * This does not change Registrar/Discovery wire contracts or proof algorithms.
  */

@@ -1,3 +1,8 @@
+// Copyright (c) 2026 OpenAgenet contributors
+//
+// Initial author: JINLIANG XU
+// Email: jlxufly@gmail.com
+
 /** Trusted SDK/Runtime interface. Never expose this byte-signing API as an agent tool. */
 export interface OanSigner {
   readonly keyId: string;

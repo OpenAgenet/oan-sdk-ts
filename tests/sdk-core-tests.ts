@@ -23,6 +23,9 @@ import {
   getArtifactReferences,
   inferResourceTypeFromDidOan,
   importIdentityBundle,
+  importIdentityMaterials,
+  exportIdentityFile,
+  validateIdentitySigningKey,
   normalizeDidDocumentForOan,
   normalizeDidOanReference,
   normalizeDidOan,
@@ -953,6 +956,13 @@ const exportedBundle = exportIdentityBundle(identityStore);
 const importedBundle = importIdentityBundle(exportedBundle);
 assert(importedBundle.subjects.length === 1, "imported bundle subject count mismatch");
 assert(importedBundle.agents.length === 1, "imported bundle agent count mismatch");
+const importedSingleIdentity = importIdentityMaterials(exportIdentityFile(agentIdentity));
+assert(importedSingleIdentity.agents.length === 1, "single identity import agent count mismatch");
+await validateIdentitySigningKey(importedSingleIdentity.agents[0]);
+assert(
+  importedSingleIdentity.agents[0].did === agentIdentity.did,
+  "single identity import DID mismatch",
+);
 
 console.log("sdk core tests passed");
 

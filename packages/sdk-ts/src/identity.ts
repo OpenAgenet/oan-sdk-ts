@@ -94,6 +94,15 @@ export interface RegistrationMaterialOptions {
   packageInfo?: Record<string, unknown>;
 }
 
+/** Ignore JWK transport hints when comparing public key material. */
+export function normalizeIdentityJwk(value: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...value };
+  delete next.alg;
+  delete next.key_ops;
+  delete next.ext;
+  return next;
+}
+
 export function validateOanIdentityRecord(record: OanIdentityRecord): void {
   if (record.did !== record.didDocument.id) throw new Error("identity_did_document_mismatch");
   if (!record.verificationMethodId) throw new Error("identity_verification_method_missing");
@@ -119,7 +128,7 @@ export function validateOanIdentityRecord(record: OanIdentityRecord): void {
   if (!record.didDocument.assertionMethod?.includes(record.verificationMethodId)) {
     throw new Error("identity_assertion_method_missing");
   }
-  if (JSON.stringify(method.publicKeyJwk) !== JSON.stringify(record.publicKeyJwk)) {
+  if (canonicalJson(normalizeIdentityJwk(method.publicKeyJwk ?? {})) !== canonicalJson(normalizeIdentityJwk(record.publicKeyJwk))) {
     throw new Error("identity_public_key_mismatch");
   }
   if (record.didDocument.oanMetadata?.subjectType === "controller"
@@ -386,6 +395,10 @@ export async function attachControllerAuthorizationProof(
   submission: ResourceRegistrationSubmission,
   options: ControllerAuthorizationProofOptions,
 ): Promise<ResourceRegistrationSubmission> {
+  // A registered OAN resource may act as a controller.  Do not narrow this
+  // to the controller resource type: the protocol permits a resource DID to
+  // hold update/registration authority for another resource.
+  validateOanIdentityRecord(options.controllerIdentity);
   if (parseRoutingCodeFromDid(submission.resourceDid) !== routingCodeFromDid(options.registrarDid)) {
     throw new Error("routing_code_registrar_mismatch");
   }
@@ -425,6 +438,8 @@ export async function attachControllerAuthorizationProof(
     expiresAt: new Date(now.getTime() + (options.ttlMs ?? 5 * 60 * 1000)).toISOString(),
   };
   const proof = await signDataIntegrityProof(challenge, options.controllerIdentity, "capabilityInvocation");
+  // Registrar binds the creator as well as the verification method.
+  proof.creator = verificationMethod;
   const bundle: ControllerAuthorizationProofBundle = {
     challenge,
     controllerDidDocument: sanitizeControllerDidDocument(options.controllerIdentity),
@@ -571,6 +586,11 @@ export function normalizeRoutingCode(value = "K7mQ9"): string {
 }
 
 function sanitizeControllerDidDocument(record: OanIdentityRecord): DidDocument {
+  if (record.didDocument.proof) {
+    // A registered controller's document is immutable authorization evidence.
+    validateOanIdentityRecord(record);
+    return removePrivateKeyMaterial(structuredClone(record.didDocument)) as DidDocument;
+  }
   const didDocument = JSON.parse(JSON.stringify(record.didDocument)) as DidDocument;
   didDocument.id = record.did;
   didDocument.verificationMethod = [

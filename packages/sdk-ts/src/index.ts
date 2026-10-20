@@ -385,7 +385,7 @@ export function verifyArtifactReferenceMaterial(packageInfo: PackageInfo): void 
 
 export function validateDidDocumentDraft(
   document: DidDocument,
-  options: { resourceDid?: string; resourceType?: ResourceType } = {},
+  options: { resourceDid?: string; resourceType?: ResourceType; requireArtifactHash?: boolean } = {},
 ): OanDraftValidationReport {
   const issues: OanValidationIssue[] = [];
   const effectiveDid = options.resourceDid ?? document.id;
@@ -414,7 +414,9 @@ export function validateDidDocumentDraft(
   const packageInfo = document.oanMetadata?.packageInfo;
   if (packageInfo) {
     try {
-      verifyArtifactReferenceMaterial(packageInfo);
+      // Registration may describe a remote manifest without claiming its binary
+      // content hash. Keep artifact-download validation strict by default.
+      if (options.requireArtifactHash !== false) verifyArtifactReferenceMaterial(packageInfo);
     } catch (error) {
       issues.push(issueFromError(error, "packageInfo"));
     }
@@ -768,3 +770,6 @@ export * from "./did-oan.js";
 export * from "./identity.js";
 export * from "./signer.js";
 export * from "./verification.js";
+
+export * from "./registration-material.js";
+export * from "./identity-files.js";

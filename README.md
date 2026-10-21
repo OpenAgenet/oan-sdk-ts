@@ -59,33 +59,34 @@ The usual flow is:
 3. call the resource or status method you need
 4. inspect the returned DID Document, resource package, or trust summary
 
-For example, a community app can use the SDK to submit a registration draft for
-the OAN community skill resource, then verify discovery visibility and inspect
-why a query matched:
+For example, a community app can build a resource draft with the SDK, complete
+the signing and hash material required by the selected registration workflow,
+then submit that prepared submission and verify discovery visibility. The
+following is intentionally a draft-oriented example; a hand-written partial
+DID Document is not a valid registration submission:
 
 ```ts
+import { createSkillDraft } from "@openagenet/oan-sdk-ts";
 import { OanClient } from "@openagenet/oan-sdk-ts/client";
 
-const client = new OanClient({ baseUrl: "https://www.openagenet.xyz" });
+const client = new OanClient(); // uses DEFAULT_OAN_OFFICIAL_ENDPOINTS
+const didDocument = createSkillDraft({
+  resourceDid: "did:oan:<new-resource-routing-code>",
+  name: "Example Skill",
+  description: "A reviewed skill description.",
+  version: "1.0.0",
+  serviceEndpoint: "https://example.invalid/skill",
+  protocol: "skill",
+});
 
-const submission = {
-  resourceDid: "did:oan:SKexamplecommunityskill001",
-  resourceType: "skill",
-  packageVersion: "1.0.0",
-  metadataHash: "sha256:community-skill-metadata",
-  packageHash: "sha256:community-skill-package",
-  hashAlgorithm: "sha-256",
-  didDocument: {
-    id: "did:oan:SKexamplecommunityskill001",
-    oanMetadata: {
-      resourceType: "skill",
-      subjectType: "skill",
-      name: "OAN Community Skill",
-      description: "A practical skill for OAN registration and discovery flows.",
-      endpoint: "https://www.openagenet.xyz/register",
-    },
-  },
-};
+// The complete signed submission should normally be produced by the identity
+// and registration-material helpers (or oan-community-skill), not assembled by
+// copying this example. It must contain the final hashes and proofs.
+// Pass this draft to an identity/signing workflow (for example
+// oan-community-skill), which creates the complete submission.
+console.log(didDocument);
+
+// const registration = await client.registerResource(completeSignedSubmission);
 
 const registration = await client.registerResource(submission);
 const discovery = await client.discoverResources({
@@ -96,12 +97,21 @@ const explanation = await client.explainDiscoveryQuery({
 });
 ```
 
-## Public Website Gateway
+## Official endpoints and website gateway
 
-For browser-facing and community workflows, use the official public website as
-the same-origin OAN gateway:
+`OanClient` uses the official API topology by default:
 
-- Base URL: `https://www.openagenet.xyz`
+- API base URL: `https://api.openagenet.xyz`
+- Registrar: `https://registrar.openagenet.xyz`
+- Discovery: `https://discovery.openagenet.xyz`
+- Root: `https://root.openagenet.xyz`
+- CDN: `https://cdn.openagenet.xyz`
+- Trust Indexer: `https://trust.openagenet.xyz`
+
+The website at `https://www.openagenet.xyz` is a browser-facing gateway and
+may proxy the same route family. It is the default entry point for the
+community Skill, while SDK applications should normally use the API defaults
+above or explicitly configure a compatible custom topology.
 
 The public gateway exposes the route shape used by the website and community
 skill:
@@ -114,7 +124,8 @@ skill:
 - `GET /cdn/status`
 - `GET /trust/v1/status`
 
-Pass that base URL explicitly when building public-client integrations:
+For a deployment that exposes the public website gateway as its API base, pass
+it explicitly:
 
 ```ts
 import { OanClient } from "@openagenet/oan-sdk-ts/client";
@@ -126,6 +137,25 @@ Third-party operators can expose the same route shape behind their own base URL.
 Advanced users and operators can still override individual Registrar,
 Discovery, Root, CDN, or Trust Indexer endpoints when testing a custom topology.
 
+## Import paths and identity material
+
+The package exposes these stable entry points:
+
+- `@openagenet/oan-sdk-ts` — SDK core, draft, identity, signing and verification helpers
+- `@openagenet/oan-sdk-ts/client` — HTTP client and official endpoint constants
+- `@openagenet/oan-sdk-ts/governance` — governance and trust-indexer helpers
+- `@openagenet/oan-sdk-ts/protocol-types` — shared protocol types
+- `@openagenet/oan-sdk-ts/identity-store-node` — Node.js identity-store persistence helpers
+
+Identity creation and registration-material helpers generate the DID Document,
+OAN Identity record and signed registration material locally. Private keys stay
+in the local identity store and are used for local signing; only the public DID
+Document, proofs and registration data required by the protocol are submitted.
+For an existing controller, use its stored identity record to create the
+controller authorization proof rather than rewriting its registered DID
+Document. A resource still owns its own signing key even when an external
+controller is declared.
+
 ## License
 
 This SDK repository is licensed under `Apache-2.0` to keep developer adoption
@@ -134,7 +164,7 @@ identity rights are reserved separately.
 
 ## Resource Draft Helpers
 
-`packages/sdk-ts` exposes convenience helpers for the four initial OAN resource forms:
+`packages/sdk-ts` exposes convenience helpers for the four current OAN resource forms:
 
 - `createAgentServiceDraft`
 - `createSkillDraft`
@@ -142,6 +172,12 @@ identity rights are reserved separately.
 - `createToolApiDraft`
 
 These helpers generate DID Document drafts with `oanMetadata`, resource descriptions, service endpoints where appropriate, protocol bindings, package metadata, and artifact references. They enforce DID subject-code and `resourceType` consistency before returning a draft.
+
+The helpers create drafts; they do not by themselves register a resource. A
+caller must finalize hashes, proofs and controller authorization (when needed),
+then call `OanClient.registerResource()` with the complete submission. For a
+turnkey community workflow, use `oan-community-skill`, which wraps these SDK
+operations and persists receipts and identity materials.
 
 ## Layering With Skills
 

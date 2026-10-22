@@ -499,11 +499,7 @@ export class OanClient {
 
   private async getJson<T>(url: string): Promise<T> {
     const response = await this.fetchImpl(url);
-    const body = await response.json();
-    if (!response.ok) {
-      throw new OanHttpError(response.status, url, body);
-    }
-    return body as T;
+    return this.readJsonResponse<T>(response, url);
   }
 
   private async postJson<T>(url: string, payload: unknown): Promise<T> {
@@ -512,11 +508,22 @@ export class OanClient {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload),
     });
-    const body = await response.json();
-    if (!response.ok) {
-      throw new OanHttpError(response.status, url, body);
+    return this.readJsonResponse<T>(response, url);
+  }
+
+  private async readJsonResponse<T>(response: Response, url: string): Promise<T> {
+    if (response.ok) {
+      return response.json() as Promise<T>;
     }
-    return body as T;
+
+    const text = await response.text();
+    let body: unknown = text;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      // Gateways may return plain text, HTML, or an empty error body.
+    }
+    throw new OanHttpError(response.status, url, body);
   }
 
   private async tryGet<T>(fn: () => Promise<T>): Promise<T | undefined> {

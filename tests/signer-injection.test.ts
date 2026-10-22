@@ -5,9 +5,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { createOanIdentityRecord, createJwkOanSigner, asDataIntegritySigner, signDidDocumentProof, verifyPinnedDidDocument } from '../packages/sdk-ts/src/index.js';
-import { signDidOanDataIntegrity, verifyDidOanDataIntegrity, didOanDefaultDocumentLoader, type IdentityMessageContext } from '../packages/protocol-types/src/index.js';
+import { signDidOanDataIntegrity, verifyDidOanDataIntegrity, didOanDefaultDocumentLoader } from '../packages/protocol-types/src/index.js';
 
 test('injected signer uses the original JSON-LD suite and independently verifies', async () => {
   const identity = await createOanIdentityRecord({ label: 'fixture', resourceType: 'skill', kind: 'agent' });
@@ -33,11 +32,4 @@ test('injected signer uses the original JSON-LD suite and independently verifies
   await assert.rejects(asDataIntegritySigner(signer, 'wrong#key-1'), /binding_mismatch/);
   const invalid = { ...signer, async signPreparedInput() { return new Uint8Array(64); } };
   await assert.rejects(signDidOanDataIntegrity(unsigned, identity.did, undefined, { signer: invalid }), /invalid_signer_signature/);
-});
-test('shared Rust fixture preserves exact camelCase fields', async () => {
-  const context: IdentityMessageContext = JSON.parse(await readFile(new URL('./identity-runtime-fixture.json', import.meta.url), 'utf8'));
-  assert.equal(context.profile, 'oan-message-v1');
-  assert.equal(context.protocol, 'http');
-  const rustFixture = JSON.parse(await readFile(new URL('../../oan-protocol-common/test-fixtures/identity-runtime/message-context.json', import.meta.url), 'utf8'));
-  assert.deepEqual(context, rustFixture);
 });

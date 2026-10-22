@@ -73,6 +73,7 @@ export const DEFAULT_OAN_OFFICIAL_ENDPOINTS: OanOfficialEndpoints = {
 
 export interface ObserveLifecycleUntilVisibleOptions {
   intervalMs?: number;
+  /** Total polling budget, including requests, response bodies, and waits. */
   timeoutMs?: number;
   signal?: AbortSignal;
   onPoll?: (snapshot: OanLifecycleSnapshot) => void;
@@ -133,8 +134,8 @@ export class OanClient {
     );
   }
 
-  async getRegistrarStatus(): Promise<RegistrarStatusResponse> {
-    return this.getJson(this.requireEndpoint("registrarEndpoint", "/registrar/status"));
+  async getRegistrarStatus(signal?: AbortSignal): Promise<RegistrarStatusResponse> {
+    return this.getJson(this.requireEndpoint("registrarEndpoint", "/registrar/status"), signal);
   }
 
   async getRegistrarRootAuthorization(): Promise<RootAuthorizationInspection> {
@@ -220,16 +221,16 @@ export class OanClient {
     );
   }
 
-  async getRootStatus(): Promise<RootStatusResponse> {
-    return this.getJson(this.requireEndpoint("rootEndpoint", "/root/status"));
+  async getRootStatus(signal?: AbortSignal): Promise<RootStatusResponse> {
+    return this.getJson(this.requireEndpoint("rootEndpoint", "/root/status"), signal);
   }
 
-  async getCdnStatus(): Promise<CdnStatusResponse> {
-    return this.getJson(this.requireEndpoint("cdnEndpoint", "/cdn/status"));
+  async getCdnStatus(signal?: AbortSignal): Promise<CdnStatusResponse> {
+    return this.getJson(this.requireEndpoint("cdnEndpoint", "/cdn/status"), signal);
   }
 
-  async getDiscoveryStatus(): Promise<DiscoveryStatusResponse> {
-    return this.getJson(this.requireEndpoint("discoveryEndpoint", "/discovery/status"));
+  async getDiscoveryStatus(signal?: AbortSignal): Promise<DiscoveryStatusResponse> {
+    return this.getJson(this.requireEndpoint("discoveryEndpoint", "/discovery/status"), signal);
   }
 
   async getDiscoveryRootAuthorization(): Promise<RootAuthorizationInspection> {
@@ -240,16 +241,18 @@ export class OanClient {
     return this.getJson(this.requireEndpoint("discoveryEndpoint", "/discovery/authorized-domains"));
   }
 
-  async getRegistrarResource(resourceDid: string): Promise<unknown> {
+  async getRegistrarResource(resourceDid: string, signal?: AbortSignal): Promise<unknown> {
     const value = await this.getJson<Record<string, unknown>>(
       this.requireEndpoint("registrarEndpoint", `/resources/${encodeURIComponent(resourceDid)}`),
+      signal,
     );
     return value.record;
   }
 
-  async getRootResource(resourceDid: string): Promise<unknown> {
+  async getRootResource(resourceDid: string, signal?: AbortSignal): Promise<unknown> {
     const value = await this.getJson<Record<string, unknown>>(
       this.requireEndpoint("rootEndpoint", `/root/resources/${encodeURIComponent(resourceDid)}`),
+      signal,
     );
     return value.package;
   }
@@ -263,9 +266,10 @@ export class OanClient {
     );
   }
 
-  async getRootResourceVersions(resourceDid: string): Promise<RootResourceVersionListResponse> {
+  async getRootResourceVersions(resourceDid: string, signal?: AbortSignal): Promise<RootResourceVersionListResponse> {
     return this.getJson(
       this.requireEndpoint("rootEndpoint", `/root/resources/${encodeURIComponent(resourceDid)}/versions`),
+      signal,
     );
   }
 
@@ -372,10 +376,11 @@ export class OanClient {
     }
   }
 
-  async getCdnResourcePackage(resourceDid: string): Promise<ResourcePackage | null> {
+  async getCdnResourcePackage(resourceDid: string, signal?: AbortSignal): Promise<ResourcePackage | null> {
     try {
       return await this.getJson<ResourcePackage>(
         this.requireEndpoint("cdnEndpoint", `/cdn/resources/${encodeURIComponent(resourceDid)}`),
+        signal,
       );
     } catch (error) {
       if (error instanceof OanHttpError && error.status === 404) {
@@ -385,10 +390,11 @@ export class OanClient {
     }
   }
 
-  async getDiscoveryVisibility(resourceDid: string): Promise<DiscoveryVisibilityResponse> {
+  async getDiscoveryVisibility(resourceDid: string, signal?: AbortSignal): Promise<DiscoveryVisibilityResponse> {
     return this.postJson<DiscoveryVisibilityResponse>(
       this.requireEndpoint("discoveryEndpoint", "/discovery/index/resources/visibility"),
       { resourceDids: [resourceDid] },
+      signal,
     );
   }
 
@@ -399,21 +405,24 @@ export class OanClient {
     );
   }
 
-  async observeLifecycle(resourceDid: string): Promise<OanLifecycleSnapshot> {
+  async observeLifecycle(resourceDid: string, signal?: AbortSignal): Promise<OanLifecycleSnapshot> {
+    signal?.throwIfAborted();
     const [registrarStatus, rootStatus, cdnStatus, discoveryStatus] = await Promise.all([
-      this.tryGet(() => this.getRegistrarStatus()),
-      this.tryGet(() => this.getRootStatus()),
-      this.tryGet(() => this.getCdnStatus()),
-      this.tryGet(() => this.getDiscoveryStatus()),
+      this.tryGet(() => this.getRegistrarStatus(signal), signal),
+      this.tryGet(() => this.getRootStatus(signal), signal),
+      this.tryGet(() => this.getCdnStatus(signal), signal),
+      this.tryGet(() => this.getDiscoveryStatus(signal), signal),
     ]);
 
+    signal?.throwIfAborted();
     const [registrarRecord, rootResource, rootVersions, cdnPackage, discoveryVisibility] = await Promise.all([
-      this.tryGet(() => this.getRegistrarResource(resourceDid)),
-      this.tryGet(() => this.getRootResource(resourceDid)),
-      this.tryGet(() => this.getRootResourceVersions(resourceDid)),
-      this.tryGet(() => this.getCdnResourcePackage(resourceDid)),
-      this.tryGet(() => this.getDiscoveryVisibility(resourceDid)),
+      this.tryGet(() => this.getRegistrarResource(resourceDid, signal), signal),
+      this.tryGet(() => this.getRootResource(resourceDid, signal), signal),
+      this.tryGet(() => this.getRootResourceVersions(resourceDid, signal), signal),
+      this.tryGet(() => this.getCdnResourcePackage(resourceDid, signal), signal),
+      this.tryGet(() => this.getDiscoveryVisibility(resourceDid, signal), signal),
     ]);
+    signal?.throwIfAborted();
 
     const observations: string[] = [];
     const registrarAccepted = registrarRecord !== undefined && registrarRecord !== null;
@@ -467,25 +476,63 @@ export class OanClient {
   ): Promise<OanLifecycleSnapshot> {
     const startedAt = Date.now();
     const intervalMs = Math.max(50, options.intervalMs ?? 1000);
-    const timeoutMs = Math.max(intervalMs, options.timeoutMs ?? 30000);
+    const timeoutMs = Math.max(0, options.timeoutMs ?? 30000);
+    const controller = new AbortController();
+    const abortedError = new Error("observe_lifecycle_aborted");
+    const timeoutError = new Error("observe_lifecycle_timeout");
+    const onAbort = () => controller.abort(abortedError);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let lastSnapshot: OanLifecycleSnapshot | undefined;
 
-    for (;;) {
-      if (options.signal?.aborted) {
-        throw new Error("observe_lifecycle_aborted");
-      }
-      const snapshot = await this.observeLifecycle(resourceDid);
-      options.onPoll?.(snapshot);
-      if (snapshot.discoveryVisible) {
-        return snapshot;
-      }
+    const checkStopped = () => {
       if (Date.now() - startedAt >= timeoutMs) {
+        controller.abort(timeoutError);
+      }
+      controller.signal.throwIfAborted();
+    };
+    const scheduleDeadline = () => {
+      if (!Number.isFinite(timeoutMs)) return;
+      const remaining = timeoutMs - (Date.now() - startedAt);
+      if (remaining <= 0) {
+        controller.abort(timeoutError);
+      } else {
+        // Long budgets must not overflow the platform's timer delay.
+        timer = setTimeout(scheduleDeadline, Math.min(remaining, 2 ** 31 - 1));
+      }
+    };
+
+    options.signal?.addEventListener("abort", onAbort, { once: true });
+    if (options.signal?.aborted) onAbort();
+    scheduleDeadline();
+    try {
+      for (;;) {
+        checkStopped();
+        const snapshot = await abortable(this.observeLifecycle(resourceDid, controller.signal), controller.signal);
+        checkStopped();
+        lastSnapshot = snapshot;
+        options.onPoll?.(snapshot);
+        checkStopped();
+        if (snapshot.discoveryVisible) return snapshot;
+        await sleep(intervalMs, controller.signal);
+      }
+    } catch (error) {
+      if (controller.signal.reason === timeoutError) {
         return {
-          ...snapshot,
-          stage: snapshot.stage === "visible-in-discovery" ? snapshot.stage : "visibility-pending",
-          observations: [...(snapshot.observations ?? []), `timed out after ${timeoutMs}ms`],
+          resourceDid,
+          registrarAccepted: false,
+          rootObserved: false,
+          cdnObserved: false,
+          discoveryVisible: false,
+          ...lastSnapshot,
+          stage: lastSnapshot?.discoveryVisible ? "visible-in-discovery" : "visibility-pending",
+          observations: [...(lastSnapshot?.observations ?? []), `timed out after ${timeoutMs}ms`],
         };
       }
-      await sleep(intervalMs, options.signal);
+      if (controller.signal.aborted) throw abortedError;
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      options.signal?.removeEventListener("abort", onAbort);
     }
   }
 
@@ -497,8 +544,8 @@ export class OanClient {
     return `${normalizeEndpoint(endpoint)}${path}`;
   }
 
-  private async getJson<T>(url: string): Promise<T> {
-    const response = await this.fetchImpl(url);
+  private async getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+    const response = await this.fetchImpl(url, { signal });
     const body = await response.json();
     if (!response.ok) {
       throw new OanHttpError(response.status, url, body);
@@ -506,11 +553,12 @@ export class OanClient {
     return body as T;
   }
 
-  private async postJson<T>(url: string, payload: unknown): Promise<T> {
+  private async postJson<T>(url: string, payload: unknown, signal?: AbortSignal): Promise<T> {
     const response = await this.fetchImpl(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload),
+      signal,
     });
     const body = await response.json();
     if (!response.ok) {
@@ -519,10 +567,14 @@ export class OanClient {
     return body as T;
   }
 
-  private async tryGet<T>(fn: () => Promise<T>): Promise<T | undefined> {
+  private async tryGet<T>(fn: () => Promise<T>, signal?: AbortSignal): Promise<T | undefined> {
     try {
-      return await fn();
+      signal?.throwIfAborted();
+      const value = await fn();
+      signal?.throwIfAborted();
+      return value;
     } catch (error) {
+      signal?.throwIfAborted();
       if (error instanceof OanHttpError && error.status === 404) {
         return undefined;
       }
@@ -575,13 +627,31 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     }, ms);
     const onAbort = () => {
       cleanup();
-      reject(new Error("observe_lifecycle_aborted"));
+      reject(signal?.reason ?? new Error("observe_lifecycle_aborted"));
     };
     const cleanup = () => {
       clearTimeout(timer);
       signal?.removeEventListener("abort", onAbort);
     };
     signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+  });
+}
+
+// Bound the wait even when an injected fetch implementation ignores its signal.
+function abortable<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => signal.removeEventListener("abort", onAbort);
+    const onAbort = () => {
+      cleanup();
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    pending.then(
+      (value) => { cleanup(); resolve(value); },
+      (error) => { cleanup(); reject(error); },
+    );
+    if (signal.aborted) onAbort();
   });
 }
 

@@ -41,7 +41,7 @@
     "build": "node ./node_modules/typescript/bin/tsc -p tsconfig.build.json",
     "prepack": "npm run build",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
-    "test": "node ./node_modules/tsx/dist/cli.mjs tests/sdk-core-tests.ts && node ./node_modules/tsx/dist/cli.mjs tests/client-workflow-tests.ts && node ./node_modules/tsx/dist/cli.mjs tests/identity-store-node-tests.ts && node ./node_modules/tsx/dist/cli.mjs tests/standard-data-integrity-tests.ts && tsx --test tests/signer-injection.test.ts tests/identity-evidence.test.ts tests/registration-materials.test.ts"
+    "test": "node ./node_modules/tsx/dist/cli.mjs tests/sdk-core-tests.ts && node ./node_modules/tsx/dist/cli.mjs tests/client-workflow-tests.ts && node ./node_modules/tsx/dist/cli.mjs tests/identity-store-node-tests.ts && node ./node_modules/tsx/dist/cli.mjs tests/standard-data-integrity-tests.ts && tsx --test tests/signer-injection.test.ts tests/identity-evidence.test.ts tests/registration-materials.test.ts tests/lifecycle-polling.test.ts"
   },
   "dependencies": {
     "@digitalbazaar/ed25519-signature-2020": "^5.4.0",

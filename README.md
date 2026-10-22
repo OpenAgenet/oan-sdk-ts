@@ -156,6 +156,37 @@ controller authorization proof rather than rewriting its registered DID
 Document. A resource still owns its own signing key even when an external
 controller is declared.
 
+## Development and CI
+
+GitHub Actions runs the following checks on Node.js 22 and 24 for branch pushes
+and pull requests. They also run from a standalone checkout without sibling
+repositories or live OAN services:
+
+```sh
+npm ci
+npm run typecheck
+npm run test:ci
+npm run build
+```
+
+`test:ci` runs the client workflow tests and every `tests/*.test.ts` file,
+including signing, identity-evidence, and registration-material tests. Add new
+self-contained tests with the `.test.ts` suffix to include them automatically.
+
+`npm test` runs both `test:ci` and `test:integration`. The latter retains the SDK
+core, Node identity-store, standard Data Integrity, and shared Rust fixture
+checks. These require external fixtures that are not included in this checkout:
+
+- `../oan-protocol-common/test-fixtures/did-oan-cross-language.json`
+- `../oan-protocol-common/test-fixtures/ed25519-signature-2020-cross-language.json`
+- `../oan-protocol-common/test-fixtures/identity-runtime/message-context.json`
+- `../oan-design-docs/genesis/nodes/genesis-registrar-1/`, containing `node.json`
+  and `identity.json` (or set `OAN_GENESIS_REGISTRAR_DIR` to that directory).
+
+Once those fixtures are available, run `npm test` for the full suite. Missing
+fixtures remain errors; a passing CI run covers only the self-contained suite,
+typechecking, and the package build.
+
 ## License
 
 This SDK repository is licensed under `Apache-2.0` to keep developer adoption

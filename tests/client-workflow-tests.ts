@@ -3,7 +3,7 @@
 // Initial author: JINLIANG XU
 // Email: jlxufly@gmail.com
 
-import { DEFAULT_OAN_OFFICIAL_ENDPOINTS, OanClient } from "../packages/client-ts/src/index.js";
+import { DEFAULT_OAN_OFFICIAL_ENDPOINTS, OanClient, OanHttpError } from "../packages/client-ts/src/index.js";
 import { GovernanceClient, subjectTypeCodeForRole } from "../packages/governance-ts/src/index.js";
 import type { ResourcePackage, ResourceRegistrationSubmission } from "../packages/protocol-types/src/index.js";
 
@@ -53,6 +53,99 @@ const submission: ResourceRegistrationSubmission = {
   packageHash: "sha256:package",
   hashAlgorithm: "sha256",
 };
+
+for (const request of [
+  { method: "GET", path: "/registrar/status", send: (client: OanClient) => client.getRegistrarStatus() },
+  { method: "POST", path: "/resources/register", send: (client: OanClient) => client.registerResource(submission) },
+]) {
+  const url = `https://http-errors.example${request.path}`;
+  for (const response of [
+    { status: 502, contentType: "text/html", body: "<html>Bad Gateway</html>", expected: "<html>Bad Gateway</html>" },
+    { status: 503, contentType: "text/plain", body: " Service Unavailable\n", expected: " Service Unavailable\n" },
+    { status: 404, contentType: "application/json", body: "", expected: "" },
+    { status: 429, contentType: "text/plain", body: "null", expected: null },
+    {
+      status: 400,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "invalid_request", details: { field: "resourceDid" } }),
+      expected: { error: "invalid_request", details: { field: "resourceDid" } },
+    },
+  ]) {
+    const errorClient = new OanClient({
+      baseUrl: "https://http-errors.example",
+      fetchImpl: (async (input, init) => {
+        assert(String(input) === url, `${request.method} error request URL mismatch`);
+        assert((init?.method ?? "GET") === request.method, "error request method mismatch");
+        return new Response(response.body, {
+          status: response.status,
+          headers: { "content-type": response.contentType },
+        });
+      }) as typeof fetch,
+    });
+    let httpError: unknown;
+    try {
+      await request.send(errorClient);
+    } catch (error) {
+      httpError = error;
+    }
+    const label = `${request.method} ${response.status}`;
+    assert(httpError instanceof OanHttpError, `${label} should throw OanHttpError`);
+    assert(httpError.status === response.status, `${label} should preserve HTTP status`);
+    assert(httpError.url === url, `${label} should preserve request URL`);
+    assert(JSON.stringify(httpError.body) === JSON.stringify(response.expected), `${label} should preserve response body`);
+  }
+
+  const successBody = { status: request.method === "GET" ? "ok" : "submitted", resourceDid };
+  const successClient = new OanClient({
+    baseUrl: "https://http-errors.example",
+    fetchImpl: (async () => new Response(JSON.stringify(successBody), {
+      headers: { "content-type": "application/json" },
+    })) as typeof fetch,
+  });
+  assert(
+    JSON.stringify(await request.send(successClient)) === JSON.stringify(successBody),
+    `${request.method} should preserve successful JSON responses`,
+  );
+
+  for (const body of ["not json", ""]) {
+    const malformedClient = new OanClient({
+      baseUrl: "https://http-errors.example",
+      fetchImpl: (async () => new Response(body, {
+        headers: { "content-type": "application/json" },
+      })) as typeof fetch,
+    });
+    let parseError: unknown;
+    try {
+      await request.send(malformedClient);
+    } catch (error) {
+      parseError = error;
+    }
+    assert(parseError instanceof SyntaxError, `${request.method} should reject malformed successful JSON`);
+  }
+
+  const streamError = new DOMException("response body aborted", "AbortError");
+  const interruptedClient = new OanClient({
+    baseUrl: "https://http-errors.example",
+    fetchImpl: (async () => new Response(new ReadableStream({
+      start(controller) {
+        controller.error(streamError);
+      },
+    }), { status: 503 })) as typeof fetch,
+  });
+  let readError: unknown;
+  try {
+    await request.send(interruptedClient);
+  } catch (error) {
+    readError = error;
+  }
+  assert(readError === streamError, `${request.method} should preserve response body read errors`);
+}
+
+const missingCdnClient = new OanClient({
+  cdnEndpoint: "https://cdn.example",
+  fetchImpl: (async () => new Response(null, { status: 404 })) as typeof fetch,
+});
+assert(await missingCdnClient.getCdnResourcePackage(resourceDid) === null, "empty CDN 404 should return null");
 
 function createResourcePackage(did: string): ResourcePackage {
   return {
